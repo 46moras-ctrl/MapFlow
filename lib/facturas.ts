@@ -1,0 +1,137 @@
+// Tipos y helpers para facturas reales de Supabase
+
+export type TipoFactura = "cobrar" | "pagar";
+export type MedioPago = "transferencia" | "tarjeta" | "efectivo" | "credito";
+
+export interface FacturaDB {
+  id: string;
+  id_empresa: string;
+  numero_factura: string;
+  cliente: string; // contraparte: cliente (cobrar) o proveedor (pagar)
+  monto: number;
+  fecha_emision: string; // YYYY-MM-DD
+  fecha_vencimiento: string | null;
+  estado: "pendiente" | "pagado" | "vencido";
+  concepto: string | null;
+  tipo: TipoFactura;
+  medio_pago_previsto: MedioPago | null;
+  medio_pago: MedioPago | null;
+  es_recurrente: boolean;
+  dia_recurrencia: number | null;
+  id_factura_origen: string | null;
+  created_at: string;
+}
+
+export interface DatosFactura {
+  numero_factura: string;
+  cliente: string;
+  monto: number;
+  fecha_emision: string;
+  fecha_vencimiento: string | null;
+  concepto: string | null;
+  tipo: TipoFactura;
+  medio_pago_previsto?: MedioPago | null;
+  es_recurrente?: boolean;
+  dia_recurrencia?: number | null;
+  estado?: "pendiente" | "pagado" | "vencido";
+}
+
+export type EstadoVisual = "pagada" | "vencida" | "por_vencer" | "pendiente";
+
+export const MEDIOS_COBRO: MedioPago[] = ["efectivo", "transferencia", "tarjeta"];
+export const MEDIOS_PAGO: MedioPago[] = ["transferencia", "tarjeta", "efectivo", "credito"];
+
+export const ETIQUETA_MEDIO: Record<MedioPago, string> = {
+  transferencia: "Transferencia",
+  tarjeta: "Tarjeta",
+  efectivo: "Efectivo",
+  credito: "Crédito",
+};
+
+export const ICONO_MEDIO: Record<MedioPago, string> = {
+  transferencia: "account_balance",
+  tarjeta: "credit_card",
+  efectivo: "payments",
+  credito: "credit_score",
+};
+
+export function hoyISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Días entre hoy y una fecha (negativo = ya pasó) */
+export function diasHasta(fecha: string, hoy: string = hoyISO()): number {
+  return Math.round((Date.parse(fecha) - Date.parse(hoy)) / 86400000);
+}
+
+/**
+ * Estado que se muestra en la interfaz, derivado del estado guardado
+ * y de la fecha de vencimiento:
+ *  - pagado            → PAGADA
+ *  - vencido (o fecha ya pasada) → VENCIDA
+ *  - vence en ≤ 7 días → POR VENCER
+ *  - resto             → PENDIENTE
+ */
+export function estadoVisual(
+  f: Pick<FacturaDB, "estado" | "fecha_vencimiento">,
+  hoy: string = hoyISO()
+): EstadoVisual {
+  if (f.estado === "pagado") return "pagada";
+  if (f.estado === "vencido") return "vencida";
+  if (!f.fecha_vencimiento) return "pendiente";
+  if (f.fecha_vencimiento < hoy) return "vencida";
+  return diasHasta(f.fecha_vencimiento, hoy) <= 7 ? "por_vencer" : "pendiente";
+}
+
+export function diasDeMora(
+  f: Pick<FacturaDB, "estado" | "fecha_vencimiento">,
+  hoy: string = hoyISO()
+): number {
+  if (f.estado === "pagado" || !f.fecha_vencimiento) return 0;
+  return Math.max(0, -diasHasta(f.fecha_vencimiento, hoy));
+}
+
+/**
+ * Próximo vencimiento de un pago recurrente: mismo día pero del mes
+ * siguiente a "desde" (con ajuste si el mes es más corto, ej. día 31).
+ */
+export function proximaFechaRecurrente(dia: number, desde: string): string {
+  const [y, m] = desde.split("-").map(Number);
+  let ny = y;
+  let nm = m + 1;
+  if (nm > 12) {
+    nm = 1;
+    ny++;
+  }
+  const ultimoDia = new Date(Date.UTC(ny, nm, 0)).getUTCDate();
+  const d = Math.min(dia, ultimoDia);
+  return `${ny}-${String(nm).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+/** Suma N meses a una fecha ISO conservando el día (con ajuste de mes corto) */
+export function sumarMeses(fecha: string, meses: number): string {
+  const [y, m, d] = fecha.split("-").map(Number);
+  const total = (m - 1) + meses;
+  const ny = y + Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  const ultimoDia = new Date(Date.UTC(ny, nm, 0)).getUTCDate();
+  return `${ny}-${String(nm).padStart(2, "0")}-${String(Math.min(d, ultimoDia)).padStart(2, "0")}`;
+}
+
+const MESES = [
+  "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+  "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
+];
+
+/** '2026-06-18' → '18 Jun 2026' (sin problemas de zona horaria) */
+export function formatearFecha(iso: string | null): string {
+  if (!iso) return "—";
+  const [a, m, d] = iso.split("-");
+  const mes = MESES[Number(m) - 1] ?? m;
+  return `${Number(d)} ${mes} ${a}`;
+}
+
+/** Formato de moneda determinista (mismo resultado en server y cliente) */
+export function fmt(n: number): string {
+  return "$" + Number(n).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}

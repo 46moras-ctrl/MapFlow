@@ -1,0 +1,21 @@
+numero_factura,cliente,monto,fecha_emision,fecha_vencimiento,concepto,estado
+FAC-2026-001,Constructora Los Andes S.A.,1250000,2026-05-24,2026-06-23,Cemento y varilla para obra,vencida
+FAC-2026-002,Remodelaciones Bogotá,480000,2026-05-29,2026-06-28,Pintura y accesorios,vencida
+FAC-2026-003,Juan Pérez (particular),95000,2026-06-03,2026-07-03,Herramientas manuales,vencida
+FAC-2026-004,Ferre-Hogar Ltda.,2100000,2026-06-08,2026-07-08,Tubería PVC y conexiones,pendiente
+FAC-2026-005,Carpintería El Roble,650000,2026-06-13,2026-07-13,Tornillería y bisagras,pendiente
+FAC-2026-006,Inmobiliaria Vista Verde,3400000,2026-06-15,2026-07-15,Materiales eléctricos,pendiente
+FAC-2026-007,María Gómez (particular),45000,2026-06-18,2026-07-18,Cerradura y candados,pendiente
+FAC-2026-008,Obras Civiles del Sur,5600000,2026-06-21,2026-07-21,"Cemento, arena y grava",pendiente
+FAC-2026-009,Taller Metálico Industrial,890000,2026-06-23,2026-07-23,Soldadura y discos de corte,pendiente
+FAC-2026-010,Constructora Los Andes S.A.,1750000,2026-06-25,2026-07-25,Segundo pedido de varilla,pendiente
+FAC-2026-011,Pinturas y Acabados JR,320000,2026-05-19,2026-06-18,Rodillos y brochas profesionales,pagada
+FAC-2026-012,Ferre-Hogar Ltda.,560000,2026-05-14,2026-06-13,Griferia y sanitarios,pagada
+FAC-2026-013,Carlos Ramírez (particular),78000,2026-05-22,2026-06-21,Set de destornilladores,pagada
+FAC-2026-014,Remodelaciones Bogotá,1180000,2026-05-26,2026-06-25,Ceramica y pegante,pagada
+FAC-2026-015,Obras Civiles del Sur,4200000,2026-05-09,2026-06-08,Malla electrosoldada,pagada
+FAC-2026-016,Electricos del Norte,720000,2026-06-28,2026-07-28,Cable e interruptores,pendiente
+FAC-2026-017,Jardinería Verde Vida,135000,2026-06-30,2026-07-30,Herramientas de jardín,pendiente
+FAC-2026-018,Constructora Miramar,2950000,2026-07-01,2026-07-31,Bloques y ladrillo,pendiente
+FAC-2026-019,Ana Torres (particular),62000,2026-07-02,2026-08-01,Manguera y aspersores,pendiente
+FAC-2026-020,Taller Metálico Industrial,1030000,2026-07-03,2026-08-02,Láminas y perfiles,pendiente
