@@ -1,10 +1,14 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+"use client";
+
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 let client: SupabaseClient | null = null;
 
 /**
- * Devuelve el cliente de Supabase (singleton).
- * Requiere NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en .env.local.
+ * Cliente de Supabase para componentes del navegador (singleton).
+ * Guarda la sesión en cookies para que el middleware y el servidor
+ * también puedan leerla (la sesión persiste al recargar).
  */
 export function getSupabaseClient(): SupabaseClient {
   if (client) return client;
@@ -18,6 +22,6 @@ export function getSupabaseClient(): SupabaseClient {
     );
   }
 
-  client = createClient(url, anonKey);
+  client = createBrowserClient(url, anonKey);
   return client;
 }

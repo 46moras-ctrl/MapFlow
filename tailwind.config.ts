@@ -50,16 +50,59 @@ const config: Config = {
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
   			},
-  			sidebar: {
-  				DEFAULT: 'hsl(var(--sidebar))',
-  				foreground: 'hsl(var(--sidebar-foreground))',
-  				primary: 'hsl(var(--sidebar-primary))',
-  				'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-  				accent: 'hsl(var(--sidebar-accent))',
-  				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
-  				border: 'hsl(var(--sidebar-border))',
-  				ring: 'hsl(var(--sidebar-ring))'
-  			}
+
+  			/* ===== Serene Navigator (DESIGN.md) ===== */
+  			surface: '#FAF9F4',
+  			'surface-dim': '#DBDAD5',
+  			'surface-bright': '#FAF9F4',
+  			'surface-container-lowest': '#FFFFFF',
+  			'surface-container-low': '#F5F4EF',
+  			'surface-container': '#EFEEE9',
+  			'surface-container-high': '#E9E8E3',
+  			'surface-container-highest': '#E3E2DE',
+  			'surface-variant': '#E3E2DE',
+  			'inverse-surface': '#30312E',
+  			'inverse-on-surface': '#F2F1EC',
+  			'on-surface': '#1B1C19',
+  			'on-surface-variant': '#444840',
+  			outline: '#74796F',
+  			'outline-variant': '#C4C8BD',
+
+  			'on-primary': '#FFFFFF',
+  			'primary-container': '#B7D1A9',
+  			'on-primary-container': '#445A3B',
+  			'primary-fixed': '#D0EAC1',
+
+  			'on-secondary': '#FFFFFF',
+  			'secondary-container': '#C2EFA7',
+  			'on-secondary-container': '#486E34',
+
+  			tertiary: '#7B5264',
+  			'on-tertiary': '#FFFFFF',
+  			'tertiary-container': '#EFBBD0',
+  			'on-tertiary-container': '#70485A',
+
+  			error: '#BA1A1A',
+  			'on-error': '#FFFFFF',
+  			'error-container': '#FFDAD6',
+  			'on-error-container': '#93000A',
+
+  			/* Colores semánticos del negocio */
+  			ink: '#0F172A',
+  			'emerald-health': '#10B981',
+  			'caution-amber': '#F59E0B',
+  			'urgent-red': '#EF4444',
+  			'slate-neutral': '#64748B'
+  		},
+  		fontFamily: {
+  			sans: ['Inter', 'system-ui', 'sans-serif']
+  		},
+  		boxShadow: {
+  			'level-1': '0 2px 4px rgba(15, 23, 42, 0.04)',
+  			'level-2': '0 8px 16px rgba(15, 23, 42, 0.08)'
+  		},
+  		maxWidth: {
+  			container: '1280px'
   		},
   		borderRadius: {
   			lg: 'var(--radius)',

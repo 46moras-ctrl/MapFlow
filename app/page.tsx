@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,10 +35,12 @@ export default function Home() {
             Map<span className="text-primary">Flow</span>
           </span>
           <nav className="flex items-center gap-3">
-            <Button variant="ghost" size="sm">
-              Iniciar sesión
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/login">Iniciar sesión</Link>
             </Button>
-            <Button size="sm">Crear cuenta</Button>
+            <Button size="sm" asChild>
+              <Link href="/registro">Crear cuenta</Link>
+            </Button>
           </nav>
         </div>
       </header>
@@ -54,9 +57,11 @@ export default function Home() {
             Tu copiloto financiero: cobra, controla y crece.
           </p>
           <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-            <Button size="lg">Comenzar gratis</Button>
-            <Button size="lg" variant="outline">
-              Ver cómo funciona
+            <Button size="lg" asChild>
+              <Link href="/registro">Comenzar gratis</Link>
+            </Button>
+            <Button size="lg" variant="outline" asChild>
+              <Link href="/dashboard">Ver cómo funciona</Link>
             </Button>
           </div>
         </section>

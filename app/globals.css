@@ -1,9 +1,31 @@
+/* Tipografía Inter + iconos Material Symbols (DESIGN.md §3 y §7) */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..700,0..1,0");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
-  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+/* Iconos Material Symbols Outlined */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  display: inline-block;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+.material-symbols-outlined.icon-filled {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
 }
 
 @layer utilities {
@@ -12,33 +34,34 @@ body {
   }
 }
 
+/* Variables shadcn mapeadas a la paleta Serene Navigator */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --background: 50 38% 97%;        /* surface #FAF9F4 */
+    --foreground: 80 6% 10%;         /* on-surface #1B1C19 */
+    --card: 0 0% 100%;               /* surface-container-lowest */
+    --card-foreground: 80 6% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 161 94% 24%;
+    --popover-foreground: 80 6% 10%;
+    --primary: 102 19% 33%;          /* primary #4E6544 */
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 160 84% 95%;
-    --accent-foreground: 161 94% 20%;
-    --destructive: 0 84% 60%;
+    --secondary: 100 38% 30%;        /* secondary #42682F */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 60 23% 95%;             /* surface-container-low #F5F4EF */
+    --muted-foreground: 90 6% 27%;   /* on-surface-variant #444840 */
+    --accent: 98 69% 80%;            /* secondary-container #C2EFA7 */
+    --accent-foreground: 99 36% 32%; /* on-secondary-container #486E34 */
+    --destructive: 0 75% 42%;        /* error #BA1A1A */
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 161 94% 30%;
-    --chart-1: 161 94% 30%;
-    --chart-2: 199 89% 48%;
-    --chart-3: 43 96% 56%;
-    --chart-4: 262 83% 58%;
-    --chart-5: 340 82% 52%;
-    --radius: 0.625rem;
+    --border: 82 9% 76%;             /* outline-variant #C4C8BD */
+    --input: 82 9% 76%;
+    --ring: 102 19% 33%;
+    --chart-1: 102 19% 33%;
+    --chart-2: 99 30% 74%;
+    --chart-3: 331 20% 40%;
+    --chart-4: 90 5% 45%;
+    --chart-5: 0 75% 42%;
+    --radius: 0.5rem;
   }
 }
 
@@ -49,4 +72,45 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Micro-interacciones (DESIGN.md §9) */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-in-up {
+  animation: fade-in-up 600ms ease-out both;
+}
+
+@keyframes login-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+.login-float {
+  animation: login-float 6s ease-in-out infinite;
+}
+
+/* Scrollbar custom */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #b7d1a9;
+  border-radius: 10px;
 }
