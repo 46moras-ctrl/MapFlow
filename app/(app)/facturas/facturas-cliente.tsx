@@ -2,17 +2,19 @@
 
 import { useState } from "react";
 import { Icon } from "@/components/app/icon";
-import type { FacturaDB, TipoFactura } from "@/lib/facturas";
+import type { ConfigEmpresa, FacturaDB, TipoFactura } from "@/lib/facturas";
 import { cn } from "@/lib/utils";
 import { SeccionFacturas } from "./seccion-facturas";
 
 export function FacturasCliente({
   facturas,
   nombreEmpresa,
+  config,
   tabInicial,
 }: {
   facturas: FacturaDB[];
   nombreEmpresa: string | null;
+  config: ConfigEmpresa;
   tabInicial: TipoFactura;
 }) {
   const [tab, setTab] = useState<TipoFactura>(tabInicial);
@@ -84,9 +86,9 @@ export function FacturasCliente({
       </div>
 
       {tab === "cobrar" ? (
-        <SeccionFacturas key="cobrar" tipo="cobrar" facturas={cobrar} />
+        <SeccionFacturas key="cobrar" tipo="cobrar" facturas={cobrar} config={config} />
       ) : (
-        <SeccionFacturas key="pagar" tipo="pagar" facturas={pagar} />
+        <SeccionFacturas key="pagar" tipo="pagar" facturas={pagar} config={config} />
       )}
     </div>
   );

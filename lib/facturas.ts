@@ -19,7 +19,30 @@ export interface FacturaDB {
   es_recurrente: boolean;
   dia_recurrencia: number | null;
   id_factura_origen: string | null;
+  id_contacto: string | null; // libreta de contactos (tabla contactos)
   created_at: string;
+}
+
+// Fila de la tabla contactos (libreta de clientes/proveedores)
+export interface ContactoDB {
+  id: string;
+  id_empresa: string;
+  nombre: string;
+  telefono: string | null;
+  email: string | null;
+  tipo: "cliente" | "proveedor" | null;
+  created_at: string;
+}
+
+// Configuración de la empresa que usan Ajustes y el agente.
+// Los campos son opcionales porque algunos nacen en migraciones
+// que pueden no estar aplicadas aún (la app no debe romperse).
+export interface ConfigEmpresa {
+  email_dueno?: string | null;
+  telefono_dueno?: string | null;
+  recordatorios_pagos_activo?: boolean;
+  recordatorios_pagos_canal?: "whatsapp" | "email" | "ambos";
+  recordatorios_cobros_canal?: "whatsapp" | "email" | "ambos";
 }
 
 export interface DatosFactura {
@@ -34,6 +57,10 @@ export interface DatosFactura {
   es_recurrente?: boolean;
   dia_recurrencia?: number | null;
   estado?: "pendiente" | "pagado" | "vencido";
+  // Contacto del cliente/proveedor: si vienen, se crea o actualiza
+  // el contacto en la libreta y se vincula a la factura.
+  telefono_contacto?: string | null;
+  email_contacto?: string | null;
 }
 
 export type EstadoVisual = "pagada" | "vencida" | "por_vencer" | "pendiente";

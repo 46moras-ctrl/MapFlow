@@ -1,3 +1,4 @@
+import { AsistenteBurbuja } from "@/components/app/asistente-burbuja";
 import { Sidebar } from "@/components/app/sidebar";
 import { Topbar } from "@/components/app/topbar";
 import { generarAlertas, type Alerta } from "@/lib/alertas";
@@ -45,6 +46,8 @@ export default async function AppLayout({
           {children}
         </main>
       </div>
+      {/* Asistente conversacional, visible en toda la app autenticada */}
+      <AsistenteBurbuja />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import {
@@ -66,6 +67,70 @@ function validar(datos: DatosFactura): string | null {
   return null;
 }
 
+/**
+ * LIBRETA AUTOMÁTICA: crea o actualiza el contacto de la factura
+ * y devuelve su id para vincularlo vía facturas.id_contacto.
+ *
+ * - Busca por nombre (sin distinguir mayúsculas): si existe, solo
+ *   completa teléfono/email si vienen nuevos. Si no existe y hay
+ *   algún dato de contacto, lo crea.
+ * - Es "best effort": si la libreta falla (ej. teléfono duplicado,
+ *   regla UNIQUE), la factura se guarda igual sin vincular — nunca
+ *   se bloquea el registro de dinero por un problema de agenda.
+ */
+async function vincularContacto(
+  supabase: SupabaseClient,
+  empresaId: string,
+  datos: DatosFactura
+): Promise<string | null> {
+  const nombre = datos.cliente.trim();
+  const telefono = datos.telefono_contacto?.trim() || null;
+  const email = datos.email_contacto?.trim() || null;
+  const tipoContacto = datos.tipo === "pagar" ? "proveedor" : "cliente";
+
+  try {
+    // ¿Ya existe? (mismo criterio que el UNIQUE: nombre normalizado)
+    const { data: existente } = await supabase
+      .from("contactos")
+      .select("id, telefono, email")
+      .ilike("nombre", nombre)
+      .maybeSingle();
+
+    if (existente) {
+      // Completar datos nuevos sin borrar los que ya había
+      const cambios: Record<string, string> = {};
+      if (telefono && telefono !== existente.telefono)
+        cambios.telefono = telefono;
+      if (email && email !== existente.email) cambios.email = email;
+      if (Object.keys(cambios).length > 0) {
+        await supabase.from("contactos").update(cambios).eq("id", existente.id);
+      }
+      return existente.id as string;
+    }
+
+    // Solo crear el contacto si aporta algo (teléfono o email);
+    // un nombre suelto ya vive en la factura misma.
+    if (!telefono && !email) return null;
+
+    const { data: creado, error } = await supabase
+      .from("contactos")
+      .insert({
+        id_empresa: empresaId,
+        nombre,
+        telefono,
+        email,
+        tipo: tipoContacto,
+      })
+      .select("id")
+      .single();
+
+    if (error || !creado) return null;
+    return creado.id as string;
+  } catch {
+    return null; // la agenda jamás bloquea la factura
+  }
+}
+
 function mensajeDuplicado(numero: string, tipo: string): string {
   const espacio = tipo === "pagar" ? "cuentas por pagar" : "cuentas por cobrar";
   return `Ya existe ${numero} en tus ${espacio}. No se creó un duplicado.`;
@@ -94,8 +159,12 @@ export async function crearFactura(datos: DatosFactura): Promise<Resultado> {
   const ctx = await contextoEmpresa();
   if ("error" in ctx) return { ok: false, error: ctx.error };
 
+  // Libreta automática: el contacto se crea/actualiza y se vincula
+  const idContacto = await vincularContacto(ctx.supabase, ctx.empresaId, datos);
+
   const { error } = await ctx.supabase.from("facturas").insert({
     ...filaDesdeDatos(datos, ctx.empresaId),
+    id_contacto: idContacto,
     estado: "pendiente",
   });
 
@@ -127,10 +196,15 @@ export async function actualizarFactura(
   );
   delete fila.id_empresa; // la pertenencia no se edita jamás
 
+  // Libreta automática también al editar (por si se corrige
+  // el nombre o se completan teléfono/email)
+  const idContacto = await vincularContacto(ctx.supabase, ctx.empresaId, datos);
+
   const { error } = await ctx.supabase
     .from("facturas")
     .update({
       ...fila,
+      ...(idContacto ? { id_contacto: idContacto } : {}),
       ...(datos.estado ? { estado: datos.estado } : {}),
     })
     .eq("id", id)
@@ -319,6 +393,62 @@ export async function cambiarEstado(
 
   revalidatePath("/facturas");
   revalidatePath(`/facturas/${id}`);
+  return { ok: true };
+}
+
+/**
+ * AJUSTES DE RECORDATORIOS (tabla empresas):
+ * - email/teléfono del DUEÑO (dónde recibe recordatorios de pagos)
+ * - switch de recordatorios de pagos + canal
+ * - canal general de recordatorios de cobros (siempre activos)
+ * RLS solo permite actualizar la empresa propia.
+ */
+export interface AjustesRecordatorios {
+  email_dueno: string | null;
+  telefono_dueno: string | null;
+  recordatorios_pagos_activo: boolean;
+  recordatorios_pagos_canal: "whatsapp" | "email" | "ambos";
+  recordatorios_cobros_canal: "whatsapp" | "email" | "ambos";
+}
+
+export async function guardarAjustesRecordatorios(
+  ajustes: AjustesRecordatorios
+): Promise<Resultado> {
+  const canales = ["whatsapp", "email", "ambos"];
+  if (
+    !canales.includes(ajustes.recordatorios_pagos_canal) ||
+    !canales.includes(ajustes.recordatorios_cobros_canal)
+  ) {
+    return { ok: false, error: "Canal no válido." };
+  }
+
+  const ctx = await contextoEmpresa();
+  if ("error" in ctx) return { ok: false, error: ctx.error };
+
+  const { error } = await ctx.supabase
+    .from("empresas")
+    .update({
+      email_dueno: ajustes.email_dueno?.trim() || null,
+      telefono_dueno: ajustes.telefono_dueno?.trim() || null,
+      recordatorios_pagos_activo: ajustes.recordatorios_pagos_activo,
+      recordatorios_pagos_canal: ajustes.recordatorios_pagos_canal,
+      recordatorios_cobros_canal: ajustes.recordatorios_cobros_canal,
+    })
+    .eq("id", ctx.empresaId);
+
+  if (error) {
+    // 42703 = columna inexistente: falta aplicar la migración
+    if (error.code === "42703" || /column/i.test(error.message)) {
+      return {
+        ok: false,
+        error:
+          "Falta aplicar la migración supabase/migracion_asistente_contactos.sql en Supabase.",
+      };
+    }
+    return { ok: false, error: "No se pudieron guardar los ajustes." };
+  }
+
+  revalidatePath("/facturas");
   return { ok: true };
 }
 

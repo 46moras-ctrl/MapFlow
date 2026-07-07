@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Icon } from "@/components/app/icon";
+import { LibretaContactos } from "@/components/app/libreta-contactos";
 import { StatusBadge } from "@/components/app/status-badge";
+import { AjustesRecordatorios } from "./ajustes-recordatorios";
 import {
   ETIQUETA_MEDIO,
   ICONO_MEDIO,
@@ -14,6 +16,7 @@ import {
   formatearFecha,
   hoyISO,
   sumarMeses,
+  type ConfigEmpresa,
   type DatosFactura,
   type FacturaDB,
   type MedioPago,
@@ -149,9 +152,11 @@ function TarjetaCiclica({
 export function SeccionFacturas({
   tipo,
   facturas,
+  config,
 }: {
   tipo: TipoFactura;
   facturas: FacturaDB[];
+  config: ConfigEmpresa;
 }) {
   const tema = obtenerTema(tipo);
   const hoy = hoyISO();
@@ -166,6 +171,8 @@ export function SeccionFacturas({
   const [pasoCredito, setPasoCredito] = useState(false);
   const [errorForm, setErrorForm] = useState<string | null>(null);
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
+  const [libretaAbierta, setLibretaAbierta] = useState(false);
+  const [ajustesAbiertos, setAjustesAbiertos] = useState(false);
   const [ocupado, startTransition] = useTransition();
 
   const totalAbierto = facturas
@@ -211,6 +218,10 @@ export function SeccionFacturas({
       fecha_emision: String(fd.get("fecha_emision") ?? ""),
       fecha_vencimiento: String(fd.get("fecha_vencimiento") ?? "") || null,
       concepto: String(fd.get("concepto") ?? "") || null,
+      // Datos de la libreta: si vienen, el contacto se crea o
+      // actualiza automáticamente y queda vinculado a la factura
+      telefono_contacto: String(fd.get("telefono_contacto") ?? "") || null,
+      email_contacto: String(fd.get("email_contacto") ?? "") || null,
       ...(tipo === "pagar"
         ? {
             medio_pago_previsto:
@@ -300,17 +311,38 @@ export function SeccionFacturas({
             ? "Dinero que te deben tus clientes."
             : "Todo lo pendiente de pagar: proveedores, renta, servicios, créditos."}
         </p>
-        <button
-          type="button"
-          onClick={() => abrirModal(null)}
-          className={cn(
-            "flex items-center gap-2 rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-90 active:scale-[0.98]",
-            tema.cta
-          )}
-        >
-          <Icon name="add" className="text-[18px]" />
-          {tipo === "cobrar" ? "Nueva factura" : "Registrar cuenta por pagar"}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Libreta: clientes en Cobrar, proveedores en Pagar */}
+          <button
+            type="button"
+            onClick={() => setLibretaAbierta(true)}
+            className="flex items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-xs font-bold uppercase tracking-wider text-on-surface-variant transition-colors hover:bg-surface-container"
+          >
+            <Icon name="contacts" className="text-[18px]" />
+            Contactos
+          </button>
+          {/* Ajustes de recordatorios (canal, switch de pagos, datos del dueño) */}
+          <button
+            type="button"
+            onClick={() => setAjustesAbiertos(true)}
+            aria-label="Ajustes de recordatorios"
+            title="Ajustes de recordatorios"
+            className="flex items-center rounded-xl border border-outline-variant bg-surface-container-lowest p-3 text-on-surface-variant transition-colors hover:bg-surface-container"
+          >
+            <Icon name="settings" className="text-[18px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => abrirModal(null)}
+            className={cn(
+              "flex items-center gap-2 rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-90 active:scale-[0.98]",
+              tema.cta
+            )}
+          >
+            <Icon name="add" className="text-[18px]" />
+            {tipo === "cobrar" ? "Nueva factura" : "Registrar cuenta por pagar"}
+          </button>
+        </div>
       </div>
 
       {errorGeneral && (
@@ -685,6 +717,36 @@ export function SeccionFacturas({
                 </div>
               </div>
 
+              {/* Contacto del cliente/proveedor → libreta automática */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                    WhatsApp {tipo === "cobrar" ? "del cliente" : "del proveedor"}
+                  </label>
+                  <input
+                    name="telefono_contacto"
+                    type="tel"
+                    placeholder="+57 300 000 0000"
+                    className="mt-1 w-full rounded-lg border border-primary-container bg-surface-container-low p-3 text-sm font-light text-on-surface outline-none focus:border-transparent focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                    Email {tipo === "cobrar" ? "del cliente" : "del proveedor"}
+                  </label>
+                  <input
+                    name="email_contacto"
+                    type="email"
+                    placeholder="correo@ejemplo.com"
+                    className="mt-1 w-full rounded-lg border border-primary-container bg-surface-container-low p-3 text-sm font-light text-on-surface outline-none focus:border-transparent focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <p className="-mt-2 text-[11px] font-light text-on-surface-variant sm:col-span-2">
+                  Opcional. Se guarda en tu libreta de contactos para los
+                  recordatorios automáticos.
+                </p>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-3">
                 <div>
                   <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
@@ -1007,6 +1069,23 @@ export function SeccionFacturas({
             )}
           </div>
         </div>
+      )}
+
+      {/* ===== Libreta de contactos (clientes o proveedores) ===== */}
+      {libretaAbierta && (
+        <LibretaContactos
+          tipo={tipo === "cobrar" ? "cliente" : "proveedor"}
+          facturas={facturas}
+          onCerrar={() => setLibretaAbierta(false)}
+        />
+      )}
+
+      {/* ===== Ajustes de recordatorios ===== */}
+      {ajustesAbiertos && (
+        <AjustesRecordatorios
+          config={config}
+          onCerrar={() => setAjustesAbiertos(false)}
+        />
       )}
 
       {/* ===== Confirmación de eliminación ===== */}
