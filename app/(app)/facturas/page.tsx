@@ -1,12 +1,7 @@
 import { createSupabaseServer } from "@/lib/supabase/server";
-import type { ConfigEmpresa, FacturaDB } from "@/lib/facturas";
-import { FacturasCliente } from "./facturas-cliente";
+import { FacturasCliente, type FacturaConContacto } from "./facturas-cliente";
 
-export default async function FacturasPage({
-  searchParams,
-}: {
-  searchParams?: { tab?: string };
-}) {
+export default async function FacturasPage() {
   const supabase = createSupabaseServer();
 
   // El middleware garantiza que hay sesión; aquí buscamos la empresa
@@ -14,31 +9,25 @@ export default async function FacturasPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // select("*") a propósito: la config de recordatorios vive en
-  // columnas que nacen en migraciones; si alguna aún no está
-  // aplicada, la app sigue funcionando (campos opcionales).
   const { data: empresa } = await supabase
     .from("empresas")
-    .select("*")
+    .select("id, nombre")
     .eq("id_usuario", user?.id ?? "")
     .maybeSingle();
 
-  let facturas: FacturaDB[] = [];
+  let facturas: FacturaConContacto[] = [];
   if (empresa) {
+    // El contacto vinculado viaja junto para precargar el modal
+    // de cobro/pago sin otra consulta.
     const { data } = await supabase
       .from("facturas")
-      .select("*")
+      .select("*, contacto:contactos(nombre, telefono, email)")
       .eq("id_empresa", empresa.id)
       .order("created_at", { ascending: false });
-    facturas = (data as FacturaDB[]) ?? [];
+    facturas = (data as FacturaConContacto[]) ?? [];
   }
 
   return (
-    <FacturasCliente
-      facturas={facturas}
-      nombreEmpresa={empresa?.nombre ?? null}
-      config={(empresa ?? {}) as ConfigEmpresa}
-      tabInicial={searchParams?.tab === "pagar" ? "pagar" : "cobrar"}
-    />
+    <FacturasCliente facturas={facturas} nombreEmpresa={empresa?.nombre ?? null} />
   );
 }

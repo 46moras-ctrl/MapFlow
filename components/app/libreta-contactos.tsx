@@ -32,8 +32,8 @@ export function LibretaContactos({
   facturas,
   onCerrar,
 }: {
-  tipo: "cliente" | "proveedor";
-  facturas: FacturaDB[]; // las del tab actual (cobrar o pagar)
+  tipo?: "cliente" | "proveedor"; // sin tipo: libreta completa
+  facturas: FacturaDB[];
   onCerrar: () => void;
 }) {
   const [contactos, setContactos] = useState<ContactoDB[] | null>(null);
@@ -63,7 +63,7 @@ export function LibretaContactos({
   // Solo los del tipo de esta libreta (los sin tipo se muestran
   // en ambas: mejor verlos de más que perderlos)
   const delTipo = useMemo(
-    () => (contactos ?? []).filter((c) => !c.tipo || c.tipo === tipo),
+    () => (contactos ?? []).filter((c) => !tipo || !c.tipo || c.tipo === tipo),
     [contactos, tipo]
   );
 
@@ -84,7 +84,12 @@ export function LibretaContactos({
     );
   }, [elegido, facturas]);
 
-  const etiqueta = tipo === "cliente" ? "clientes" : "proveedores";
+  const etiqueta =
+    tipo === "cliente"
+      ? "clientes"
+      : tipo === "proveedor"
+        ? "proveedores"
+        : "contactos";
 
   return (
     <div
@@ -136,7 +141,7 @@ export function LibretaContactos({
                   autoFocus
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
-                  placeholder={`Buscar ${tipo} por nombre…`}
+                  placeholder={`Buscar ${tipo ?? "contacto"} por nombre…`}
                   className="w-full bg-transparent text-sm font-light text-on-surface outline-none placeholder:text-on-surface-variant/60"
                 />
               </label>

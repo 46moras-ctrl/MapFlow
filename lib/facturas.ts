@@ -158,7 +158,8 @@ export function formatearFecha(iso: string | null): string {
   return `${Number(d)} ${mes} ${a}`;
 }
 
-/** Formato de moneda determinista (mismo resultado en server y cliente) */
+/** Formato de moneda determinista (mismo resultado en server y cliente), siempre con 2 decimales */
 export function fmt(n: number): string {
-  return "$" + Number(n).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const [entero, decimales] = Number(n).toFixed(2).split(".");
+  return "$" + entero.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + decimales;
 }

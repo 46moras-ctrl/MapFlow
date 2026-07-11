@@ -73,7 +73,7 @@ export function AsistenteBurbuja() {
         <div
           role="dialog"
           aria-label="Asistente de MapFlow"
-          className="fade-in-up fixed bottom-24 right-6 z-40 flex h-[480px] w-[360px] flex-col overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-level-2"
+          className="fade-in-up fixed bottom-40 right-4 z-40 flex h-[70vh] max-h-[480px] w-[calc(100vw-2rem)] max-w-[360px] flex-col overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-level-2 md:bottom-24 md:right-6"
         >
           {/* Encabezado */}
           <div className="flex items-center gap-3 bg-primary px-4 py-3 text-on-primary">
@@ -162,7 +162,7 @@ export function AsistenteBurbuja() {
         type="button"
         onClick={() => setAbierto((v) => !v)}
         aria-label={abierto ? "Cerrar asistente" : "Abrir asistente"}
-        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-on-primary shadow-level-2 transition-transform hover:scale-105 active:scale-95"
+        className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-on-primary shadow-level-2 transition-transform hover:scale-105 active:scale-95 md:bottom-6 md:right-6"
       >
         <Icon name={abierto ? "close" : "smart_toy"} filled className="text-[26px]" />
       </button>

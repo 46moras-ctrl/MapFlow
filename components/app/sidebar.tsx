@@ -6,19 +6,27 @@ import { Icon } from "@/components/app/icon";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
-  { href: "/facturas", label: "Facturas", icon: "description" },
-  { href: "/egresos", label: "Egresos", icon: "payments" },
-  { href: "/reportes", label: "Reportes", icon: "analytics" },
-  { href: "/presupuestos", label: "Presupuestos", icon: "savings" },
-  { href: "/configuracion", label: "Configuración", icon: "settings" },
-];
-
-// SideNavBar (DESIGN.md §8.1): 256px fija, fondo surface-container-low
-export function Sidebar() {
+// SideNavBar (DESIGN.md §8.1): 256px fija, fondo surface-container-low.
+// Solo en pantallas md+: en móvil la navegación vive en BottomNav.
+export function Sidebar({
+  mostrarPresupuestos = false,
+}: {
+  mostrarPresupuestos?: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+
+  const navItems = [
+    { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+    { href: "/facturas", label: "Facturas", icon: "description" },
+    { href: "/pendientes", label: "Pendientes", icon: "pending_actions" },
+    { href: "/reportes", label: "Reportes", icon: "analytics" },
+    // El módulo de presupuestos se activa desde Configuración
+    ...(mostrarPresupuestos
+      ? [{ href: "/presupuestos", label: "Presupuestos", icon: "savings" }]
+      : []),
+    { href: "/configuracion", label: "Configuración", icon: "settings" },
+  ];
 
   async function cerrarSesion() {
     await getSupabaseClient().auth.signOut();
@@ -27,7 +35,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 flex w-64 flex-col border-r border-outline-variant bg-surface-container-low px-4 py-6">
+    <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-outline-variant bg-surface-container-low px-4 py-6 md:flex">
       {/* Logo */}
       <Link href="/dashboard" className="flex items-center gap-2 px-2">
         <Icon name="explore" filled className="text-[28px] text-primary" />
@@ -66,8 +74,9 @@ export function Sidebar() {
 
       {/* CTA inferior */}
       <div className="flex flex-col gap-2">
+        {/* Ingreso rápido: abre directo el formulario de nueva factura */}
         <Link
-          href="/facturas"
+          href="/facturas?nueva=1"
           className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-xs font-bold uppercase tracking-wider text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
         >
           <Icon name="add" className="text-[18px]" />

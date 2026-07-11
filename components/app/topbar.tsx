@@ -11,9 +11,11 @@ const titulos: [string, string][] = [
   ["/dashboard", "Dashboard"],
   ["/facturas/", "Detalle de Factura"],
   ["/facturas", "Facturas"],
-  ["/egresos", "Egresos y Gastos"],
-  ["/reportes", "Reportes y Análisis"],
+  ["/pendientes", "Pendientes"],
+  ["/reportes", "Reportes"],
   ["/presupuestos", "Presupuestos"],
+  ["/movimientos", "Detalle financiero"],
+  ["/ventas", "Ventas"],
   ["/configuracion", "Configuración"],
 ];
 
@@ -22,10 +24,11 @@ const estiloNivel: Record<
   NivelAlerta,
   { contenedor: string; icono: string; etiqueta: string }
 > = {
+  // Lo urgente ya no grita en rojo: usa el color de acento, más sutil
   urgente: {
     contenedor:
-      "border-error bg-error text-on-error shadow-level-2 hover:opacity-95",
-    icono: "text-on-error",
+      "border-tertiary bg-tertiary-container/70 text-on-tertiary-container hover:bg-tertiary-container",
+    icono: "text-tertiary",
     etiqueta: "PAGAR · URGENTE",
   },
   media: {
@@ -49,16 +52,30 @@ const estiloNivel: Record<
 };
 
 // TopAppBar (DESIGN.md §8.2): h-16 sticky, fondo surface
-export function Topbar({ alertas }: { alertas: Alerta[] }) {
+export function Topbar({
+  alertas,
+  empresa,
+}: {
+  alertas: Alerta[];
+  empresa?: { nombre?: string | null; foto_url?: string | null } | null;
+}) {
   const pathname = usePathname();
   const [abierto, setAbierto] = useState(false);
+  // "Borrar notificaciones": las oculta en esta sesión del navegador
+  const [borradas, setBorradas] = useState(false);
+  const visibles = borradas ? [] : alertas;
   const titulo =
     titulos.find(([ruta]) => pathname.startsWith(ruta))?.[1] ?? "MapFlow";
 
-  const urgentes = alertas.filter((a) => a.nivel === "urgente").length;
+  const inicialesEmpresa = (empresa?.nombre ?? "Mi negocio")
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-outline-variant bg-surface px-8">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-outline-variant bg-surface px-4 md:px-8">
       <div className="flex items-center gap-6">
         <h2 className="text-sm font-bold uppercase tracking-wider text-on-surface-variant">
           {titulo}
@@ -78,7 +95,7 @@ export function Topbar({ alertas }: { alertas: Alerta[] }) {
         <div className="relative">
           <button
             type="button"
-            aria-label={`Notificaciones (${alertas.length})`}
+            aria-label={`Notificaciones (${visibles.length})`}
             onClick={() => setAbierto((v) => !v)}
             className={cn(
               "relative rounded-full p-2 transition-colors hover:bg-surface-variant",
@@ -89,19 +106,15 @@ export function Topbar({ alertas }: { alertas: Alerta[] }) {
           >
             <Icon
               name={
-                alertas.length > 0 ? "notifications_active" : "notifications"
+                visibles.length > 0 ? "notifications_active" : "notifications"
               }
-              filled={alertas.length > 0}
+              filled={visibles.length > 0}
               className="text-[22px]"
             />
-            {alertas.length > 0 && (
-              <span
-                className={cn(
-                  "absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white",
-                  urgentes > 0 ? "bg-error" : "bg-caution-amber"
-                )}
-              >
-                {alertas.length}
+            {visibles.length > 0 && (
+              // Contador en color de acento (sutil), ya no en rojo
+              <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-tertiary px-1 text-[10px] font-bold text-on-tertiary">
+                {visibles.length}
               </span>
             )}
           </button>
@@ -118,15 +131,15 @@ export function Topbar({ alertas }: { alertas: Alerta[] }) {
                   <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
                     Notificaciones
                   </span>
-                  {alertas.length > 0 && (
+                  {visibles.length > 0 && (
                     <span className="text-xs font-light text-on-surface-variant">
-                      {alertas.length} alerta{alertas.length === 1 ? "" : "s"}
+                      {visibles.length} alerta{visibles.length === 1 ? "" : "s"}
                     </span>
                   )}
                 </div>
 
                 <div className="max-h-[420px] overflow-y-auto p-3">
-                  {alertas.length === 0 ? (
+                  {visibles.length === 0 ? (
                     <div className="flex flex-col items-center py-10 text-center">
                       <Icon
                         name="notifications_off"
@@ -138,7 +151,7 @@ export function Topbar({ alertas }: { alertas: Alerta[] }) {
                     </div>
                   ) : (
                     <ul className="flex flex-col gap-2">
-                      {alertas.map((a) => {
+                      {visibles.map((a) => {
                         const estilo = estiloNivel[a.nivel];
                         return (
                           <li key={a.id}>
@@ -196,6 +209,20 @@ export function Topbar({ alertas }: { alertas: Alerta[] }) {
                     </ul>
                   )}
                 </div>
+
+                {/* Borrar notificaciones (se limpian en esta sesión) */}
+                {visibles.length > 0 && (
+                  <div className="border-t border-outline-variant bg-surface-container-low px-4 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setBorradas(true)}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold uppercase tracking-wider text-on-surface-variant transition-colors hover:bg-surface-variant hover:text-on-surface"
+                    >
+                      <Icon name="clear_all" className="text-[18px]" />
+                      Borrar notificaciones
+                    </button>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -208,12 +235,24 @@ export function Topbar({ alertas }: { alertas: Alerta[] }) {
         >
           <Icon name="help" className="text-[22px]" />
         </button>
-        <div
-          className="ml-2 flex h-9 w-9 items-center justify-center rounded-full bg-primary-container text-sm font-bold text-on-primary-container"
-          title="Mi cuenta"
+        {/* Foto de perfil: se cambia en Configuración → Perfil */}
+        <Link
+          href="/configuracion"
+          title={empresa?.nombre ?? "Mi cuenta"}
+          aria-label="Ir a Configuración"
+          className="ml-2 flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-primary-container text-sm font-bold text-on-primary-container transition-transform hover:scale-105"
         >
-          MG
-        </div>
+          {empresa?.foto_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={empresa.foto_url}
+              alt={`Foto de perfil de ${empresa?.nombre ?? "la empresa"}`}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            inicialesEmpresa
+          )}
+        </Link>
       </div>
     </header>
   );

@@ -2,7 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
-import { createSupabaseServer } from "@/lib/supabase/server";
+import { contextoEmpresa } from "@/lib/supabase/contexto";
 import {
   hoyISO,
   proximaFechaRecurrente,
@@ -18,36 +18,6 @@ interface Resultado {
 }
 
 const MEDIOS: MedioPago[] = ["transferencia", "tarjeta", "efectivo", "credito"];
-
-/**
- * Toda operación parte de aquí: usuario autenticado + su empresa.
- * Así una petición jamás puede tocar facturas de otra empresa.
- */
-async function contextoEmpresa() {
-  const supabase = createSupabaseServer();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { error: "Tu sesión expiró. Vuelve a iniciar sesión." as const };
-  }
-
-  const { data: empresa } = await supabase
-    .from("empresas")
-    .select("id")
-    .eq("id_usuario", user.id)
-    .maybeSingle();
-
-  if (!empresa) {
-    return {
-      error:
-        "No encontramos una empresa asociada a tu cuenta. Cierra sesión y vuelve a entrar." as const,
-    };
-  }
-
-  return { supabase, empresaId: empresa.id as string };
-}
 
 function validar(datos: DatosFactura): string | null {
   if (!datos.numero_factura?.trim())
@@ -143,7 +113,8 @@ function filaDesdeDatos(datos: DatosFactura, empresaId: string) {
     cliente: datos.cliente.trim(),
     monto: datos.monto,
     fecha_emision: datos.fecha_emision,
-    fecha_vencimiento: datos.fecha_vencimiento || null,
+    // Sin vencimiento = el movimiento vence el mismo día de emisión
+    fecha_vencimiento: datos.fecha_vencimiento || datos.fecha_emision,
     concepto: datos.concepto?.trim() || null,
     tipo: datos.tipo,
     medio_pago_previsto: datos.medio_pago_previsto || null,
@@ -162,10 +133,13 @@ export async function crearFactura(datos: DatosFactura): Promise<Resultado> {
   // Libreta automática: el contacto se crea/actualiza y se vincula
   const idContacto = await vincularContacto(ctx.supabase, ctx.empresaId, datos);
 
+  // REGLA: toda factura entra como PAGADA (celda blanca). Solo el
+  // registro de un cobro/pago pendiente (triángulo ⚠️ / Pendientes)
+  // la pasa a pendiente y la pinta de rosa.
   const { error } = await ctx.supabase.from("facturas").insert({
     ...filaDesdeDatos(datos, ctx.empresaId),
     id_contacto: idContacto,
-    estado: "pendiente",
+    estado: datos.estado ?? "pagado",
   });
 
   if (error) {

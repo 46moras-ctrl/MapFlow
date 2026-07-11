@@ -68,14 +68,16 @@ const config: Config = {
   			outline: '#74796F',
   			'outline-variant': '#C4C8BD',
 
+  			/* Tonos derivados de la marca: viven en variables CSS para
+  			   que "Identidad de marca" recoloree TODA la plataforma */
   			'on-primary': '#FFFFFF',
-  			'primary-container': '#B7D1A9',
-  			'on-primary-container': '#445A3B',
-  			'primary-fixed': '#D0EAC1',
+  			'primary-container': 'hsl(var(--primary-container))',
+  			'on-primary-container': 'hsl(var(--on-primary-container))',
+  			'primary-fixed': 'hsl(var(--primary-fixed))',
 
   			'on-secondary': '#FFFFFF',
-  			'secondary-container': '#C2EFA7',
-  			'on-secondary-container': '#486E34',
+  			'secondary-container': 'hsl(var(--secondary-container))',
+  			'on-secondary-container': 'hsl(var(--on-secondary-container))',
 
   			tertiary: '#7B5264',
   			'on-tertiary': '#FFFFFF',

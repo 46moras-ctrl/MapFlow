@@ -1,0 +1,1249 @@
+{
+  "name": "MapFlow — Agente de Cobros (3 ramas)",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000001",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -720,
+        -560
+      ],
+      "webhookId": "9f2b6a1e-0d3c-4f5a-8b1e-200000000001",
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "name": "MapFlow Telegram"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000002",
+      "name": "Webhook Chat Web",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        -320
+      ],
+      "webhookId": "9f2b6a1e-0d3c-4f5a-8b1e-200000000002",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mapflow-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000003",
+      "name": "Cron Diario 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -720,
+        -80
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000004",
+      "name": "Normalizar Telegram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        -560
+      ],
+      "parameters": {
+        "jsCode": "// Normaliza la entrada de Telegram para el Switch\nconst out = [];\nfor (const item of $input.all()) {\n  const msg = item.json.message || {};\n  out.push({ json: {\n    rama: 'consulta_interna',\n    origen: 'telegram',\n    texto: msg.text || '',\n    telegram_chat_id: String((msg.chat && msg.chat.id) || ''),\n    usuario: (msg.from && msg.from.username) || ''\n  }});\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000005",
+      "name": "Normalizar Chat Web",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        -320
+      ],
+      "parameters": {
+        "jsCode": "// El chat de la web de MapFlow manda: { id_empresa, mensaje }\nconst out = [];\nfor (const item of $input.all()) {\n  const b = item.json.body || item.json;\n  out.push({ json: {\n    rama: 'consulta_interna',\n    origen: 'chat_plataforma',\n    texto: b.mensaje || b.message || '',\n    id_empresa: b.id_empresa || null\n  }});\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000006",
+      "name": "Preparar Ciclos Diarios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "// Un solo disparo del cron alimenta las ramas 2 y 3:\n// el Switch enruta cada item a su rama.\nconst hoy = $now.toFormat('yyyy-MM-dd');\nreturn [\n  { json: { rama: 'recordatorio_deudor', hoy } },\n  { json: { rama: 'alerta_dueno', hoy } }\n];"
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000007",
+      "name": "Separar Ramas",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -240,
+        -320
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "leftValue": "={{ $json.rama }}",
+                    "rightValue": "consulta_interna",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "consulta_interna"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r2",
+                    "leftValue": "={{ $json.rama }}",
+                    "rightValue": "recordatorio_deudor",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "recordatorio_deudor"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r3",
+                    "leftValue": "={{ $json.rama }}",
+                    "rightValue": "alerta_dueno",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "alerta_dueno"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000008",
+      "name": "Identificar Empresa",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        -560
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://qnsuaycfryruebclgavv.supabase.co/rest/v1/empresas?select=id,nombre&limit=1&{{ $json.origen === 'telegram' ? 'telegram_chat_id=eq.' + $json.telegram_chat_id : 'id=eq.' + $json.id_empresa }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000009",
+      "name": "Preparar Consulta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        -560
+      ],
+      "parameters": {
+        "jsCode": "// REGLA DE ORO: sin empresa identificada NO se responde nada.\nconst empresa = $input.first().json || {};\nconst ctx = $('Separar Ramas').first().json;\nif (!empresa.id) {\n  throw new Error('Empresa no encontrada para este usuario/canal. Acceso denegado (aislamiento por empresa).');\n}\nreturn [{ json: { ...ctx, id_empresa: empresa.id, nombre_empresa: empresa.nombre } }];"
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000010",
+      "name": "Agente Consultas",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        440,
+        -560
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.texto }}",
+        "options": {
+          "systemMessage": "=Eres el asistente interno de MapFlow para la empresa «{{ $json.nombre_empresa }}» (id_empresa: {{ $json.id_empresa }}). Fecha actual: {{ $now.format('yyyy-MM-dd') }}.\n\nREGLAS:\n1. Respondes SIEMPRE en español, claro y breve.\n2. Solo atiendes al dueño y empleados de ESTA empresa. Tus herramientas ya están limitadas a los datos de esta empresa: úsalas para responder sobre facturas, contactos y movimientos.\n3. AISLAMIENTO ESTRICTO: nunca busques, infieras ni menciones datos de otra empresa. Si te piden datos de terceros o de otra empresa, niégate cortésmente.\n4. Si la información no aparece en las herramientas, dilo honestamente; no inventes cifras.\n5. Muestra los montos con dos decimales.",
+          "maxIterations": 15
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000011",
+      "name": "Gemini Consultas",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        360,
+        -360
+      ],
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "name": "MapFlow Gemini"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000012",
+      "name": "Consultar Facturas",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        520,
+        -360
+      ],
+      "parameters": {
+        "toolDescription": "Devuelve las facturas de la empresa (máximo 50): cuentas por cobrar (tipo=cobrar) y por pagar (tipo=pagar), con número, cliente, concepto, monto, estado (pendiente, pagado, vencido) y fechas de emisión y vencimiento. Úsala para preguntas sobre facturas, cobros, deudas, vencimientos o clientes morosos.",
+        "method": "GET",
+        "url": "=https://qnsuaycfryruebclgavv.supabase.co/rest/v1/facturas?id_empresa=eq.{{ $('Preparar Consulta').first().json.id_empresa }}&select=numero_factura,cliente,concepto,tipo,monto,estado,fecha_emision,fecha_vencimiento,medio_pago&order=fecha_vencimiento.asc.nullslast&limit=50",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi"
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000013",
+      "name": "Consultar Contactos",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        -360
+      ],
+      "parameters": {
+        "toolDescription": "Devuelve la libreta de contactos de la empresa (máximo 100): clientes y proveedores con nombre, teléfono, email y tipo. Úsala para preguntas sobre datos de contacto de clientes o proveedores.",
+        "method": "GET",
+        "url": "=https://qnsuaycfryruebclgavv.supabase.co/rest/v1/contactos?id_empresa=eq.{{ $('Preparar Consulta').first().json.id_empresa }}&select=nombre,telefono,email,tipo&order=nombre.asc&limit=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi"
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000014",
+      "name": "Consultar Movimientos",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        840,
+        -360
+      ],
+      "parameters": {
+        "toolDescription": "Devuelve los movimientos de dinero de la empresa (máximo 50, del más reciente al más viejo): ingresos, egresos y pagos con monto, descripción, fecha, categoría y contraparte. Úsala para preguntas sobre ventas, gastos, flujo de caja o movimientos recientes.",
+        "method": "GET",
+        "url": "=https://qnsuaycfryruebclgavv.supabase.co/rest/v1/movimientos?id_empresa=eq.{{ $('Preparar Consulta').first().json.id_empresa }}&select=tipo,monto,descripcion,fecha,categoria,contraparte,estado&order=fecha.desc&limit=50",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi"
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000015",
+      "name": "¿Responder por Telegram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        -560
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cnd1",
+              "leftValue": "={{ $('Preparar Consulta').first().json.origen }}",
+              "rightValue": "telegram",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000016",
+      "name": "Responder Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        -640
+      ],
+      "webhookId": "9f2b6a1e-0d3c-4f5a-8b1e-200000000016",
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Preparar Consulta').first().json.telegram_chat_id }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "name": "MapFlow Telegram"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000017",
+      "name": "Responder Chat Web",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        -480
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ respuesta: $json.output }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000018",
+      "name": "Registrar Consulta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        -560
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://qnsuaycfryruebclgavv.supabase.co/rest/v1/mensajes_agente?on_conflict=id_empresa,huella_unica",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id_empresa: $('Preparar Consulta').first().json.id_empresa, id_factura: null, id_contacto: null, tipo_accion: 'consulta_interna', canal: $('Preparar Consulta').first().json.origen === 'telegram' ? 'telegram' : 'chat_plataforma', direccion: 'entrante', mensaje_entrante: $('Preparar Consulta').first().json.texto, mensaje_generado: $('Agente Consultas').first().json.output, destinatario: null, estado_envio: 'enviado', huella_unica: 'consulta:' + $('Preparar Consulta').first().json.origen + ':' + $now.toMillis() }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000019",
+      "name": "Buscar Facturas por Cobrar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        -80
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://qnsuaycfryruebclgavv.supabase.co/rest/v1/facturas?tipo=eq.cobrar&estado=in.(pendiente,vencido)&fecha_vencimiento=lte.{{ $now.plus({ days: 1 }).toFormat('yyyy-MM-dd') }}&select=id,id_empresa,id_contacto,numero_factura,cliente,concepto,monto,estado,fecha_vencimiento,contacto:contactos(nombre,telefono,email),empresa:empresas(nombre,datos_cobro)&order=id_empresa,fecha_vencimiento&limit=200",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000020",
+      "name": "Preparar Recordatorios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "// Un recordatorio por factura. La huella evita repetir el mismo día.\n// AISLAMIENTO: cada item lleva SOLO los datos de su propia factura,\n// contacto y empresa (vía FK); nunca se mezclan empresas.\nconst hoy = $now.toFormat('yyyy-MM-dd');\nconst out = [];\nfor (const item of $input.all()) {\n  const f = item.json;\n  const c = f.contacto || {};\n  if (!c.email && !c.telefono) continue; // sin datos de contacto no hay envío\n  const mora = Math.max(0, Math.round((Date.parse(hoy) - Date.parse(f.fecha_vencimiento)) / 86400000));\n  out.push({ json: { ...f, hoy, dias_mora: mora, huella_unica: 'rec:' + f.id + ':' + hoy } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000021",
+      "name": "Verificar Enviados Hoy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -80
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://qnsuaycfryruebclgavv.supabase.co/rest/v1/mensajes_agente?select=huella_unica&estado_envio=eq.enviado&huella_unica=in.({{ $('Preparar Recordatorios').all().map(i => '\"' + i.json.huella_unica + '\"').join(',') }})",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000022",
+      "name": "Filtrar Ya Enviados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "// Deja pasar solo las facturas cuyo recordatorio de HOY no existe aún\n// (anti-duplicación, regla de oro #1; el índice único de la tabla es el respaldo)\nconst enviados = new Set(\n  $input.all().map(i => (i.json || {}).huella_unica).filter(Boolean)\n);\nreturn $('Preparar Recordatorios').all().filter(i => !enviados.has(i.json.huella_unica));"
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000023",
+      "name": "Redactar Recordatorio",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        880,
+        -80
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=Redacta un recordatorio de pago para un cliente. Tono CORDIAL y profesional, en español, máximo 120 palabras, sin amenazas.\n\nUsa ÚNICAMENTE estos datos (no agregues ni inventes nada más):\n- Cliente: {{ $json.contacto?.nombre || $json.cliente }}\n- Factura: {{ $json.numero_factura }}{{ $json.concepto ? ' (' + $json.concepto + ')' : '' }}\n- Monto: {{ $json.monto }}\n- Fecha de vencimiento: {{ $json.fecha_vencimiento }}\n- Días de atraso: {{ $json.dias_mora }}\n- Empresa que cobra: {{ $json.empresa?.nombre }}\n\nSi los días de atraso son 0, es un aviso amable de próximo vencimiento. Cierra indicando que abajo está el botón con la información para pagar. Devuelve SOLO el texto del mensaje, sin asunto y sin comillas.",
+        "options": {}
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000024",
+      "name": "Gemini Recordatorios",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        880,
+        120
+      ],
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "name": "MapFlow Gemini"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000025",
+      "name": "Enviar Email Deudor",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        -160
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "fromEmail": "MapFlow Cobros <46moras@gmail.com>",
+        "toEmail": "={{ $('Filtrar Ya Enviados').item.json.contacto?.email }}",
+        "subject": "=Recordatorio de pago · Factura {{ $('Filtrar Ya Enviados').item.json.numero_factura }} · {{ $('Filtrar Ya Enviados').item.json.empresa?.nombre }}",
+        "emailFormat": "html",
+        "html": "=<div style='font-family:Arial,sans-serif;max-width:520px'><p>{{ $json.text.replaceAll('\\n', '<br>') }}</p><p style='margin:24px 0'><a href='{{ $('Filtrar Ya Enviados').item.json.empresa?.datos_cobro?.link_pasarela || $('Filtrar Ya Enviados').item.json.empresa?.datos_cobro?.qr_url || '#' }}' style='background:#16a34a;color:#ffffff;padding:12px 22px;border-radius:8px;text-decoration:none'>💳 Ver información para pagar</a></p><p style='color:#666;font-size:13px'>Banco: {{ $('Filtrar Ya Enviados').item.json.empresa?.datos_cobro?.banco || '—' }} · Cuenta: {{ $('Filtrar Ya Enviados').item.json.empresa?.datos_cobro?.cuenta || '—' }} · Titular: {{ $('Filtrar Ya Enviados').item.json.empresa?.datos_cobro?.titular || '—' }}</p></div>",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "name": "MapFlow Gmail"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000026",
+      "name": "Enviar WhatsApp Deudor",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        40
+      ],
+      "disabled": true,
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "",
+        "recipientPhoneNumber": "={{ $('Filtrar Ya Enviados').item.json.contacto?.telefono }}",
+        "textBody": "={{ $json.text }}"
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000027",
+      "name": "Registrar Recordatorio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1380,
+        -240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://qnsuaycfryruebclgavv.supabase.co/rest/v1/mensajes_agente?on_conflict=id_empresa,huella_unica",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id_empresa: $('Filtrar Ya Enviados').item.json.id_empresa, id_factura: $('Filtrar Ya Enviados').item.json.id, id_contacto: $('Filtrar Ya Enviados').item.json.id_contacto, tipo_accion: 'recordatorio_deudor', canal: 'email', direccion: 'saliente', mensaje_entrante: null, mensaje_generado: $('Redactar Recordatorio').item.json.text, destinatario: $('Filtrar Ya Enviados').item.json.contacto?.email, estado_envio: 'enviado', huella_unica: $('Filtrar Ya Enviados').item.json.huella_unica }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000028",
+      "name": "Registrar Recordatorio Fallido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1380,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://qnsuaycfryruebclgavv.supabase.co/rest/v1/mensajes_agente?on_conflict=id_empresa,huella_unica",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id_empresa: $('Filtrar Ya Enviados').item.json.id_empresa, id_factura: $('Filtrar Ya Enviados').item.json.id, id_contacto: $('Filtrar Ya Enviados').item.json.id_contacto, tipo_accion: 'recordatorio_deudor', canal: 'email', direccion: 'saliente', mensaje_entrante: null, mensaje_generado: $('Redactar Recordatorio').item.json.text, destinatario: $('Filtrar Ya Enviados').item.json.contacto?.email, estado_envio: 'fallido', huella_unica: $('Filtrar Ya Enviados').item.json.huella_unica + ':fallido:' + $now.toMillis() }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000029",
+      "name": "Buscar Facturas Morosas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://qnsuaycfryruebclgavv.supabase.co/rest/v1/facturas?tipo=eq.cobrar&estado=in.(pendiente,vencido)&fecha_vencimiento=lt.{{ $now.minus({ days: 5 }).toFormat('yyyy-MM-dd') }}&select=id,id_empresa,id_contacto,numero_factura,cliente,concepto,monto,fecha_vencimiento,contacto:contactos(nombre,telefono,email),empresa:empresas(nombre,email_dueno,telefono_dueno)&order=id_empresa,fecha_vencimiento&limit=200",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000030",
+      "name": "Preparar Alertas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// Alerta al dueño por facturas con más de 5 días de atraso.\n// Se incluye estado 'pendiente' además de 'vencido' por si la app\n// aún no marcó la factura como vencida: la fecha manda.\nconst hoy = $now.toFormat('yyyy-MM-dd');\nconst out = [];\nfor (const item of $input.all()) {\n  const f = item.json;\n  const e = f.empresa || {};\n  if (!e.email_dueno && !e.telefono_dueno) continue; // el dueño no configuró contacto\n  const mora = Math.max(0, Math.round((Date.parse(hoy) - Date.parse(f.fecha_vencimiento)) / 86400000));\n  if (mora <= 5) continue; // regla: MÁS de 5 días de atraso\n  out.push({ json: { ...f, hoy, dias_mora: mora, huella_unica: 'alerta:' + f.id + ':' + hoy } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000031",
+      "name": "Verificar Alertas Enviadas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        400
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://qnsuaycfryruebclgavv.supabase.co/rest/v1/mensajes_agente?select=huella_unica&estado_envio=eq.enviado&huella_unica=in.({{ $('Preparar Alertas').all().map(i => '\"' + i.json.huella_unica + '\"').join(',') }})",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000032",
+      "name": "Filtrar Alertas Nuevas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// Deja pasar solo las alertas que no se enviaron hoy\nconst enviados = new Set(\n  $input.all().map(i => (i.json || {}).huella_unica).filter(Boolean)\n);\nreturn $('Preparar Alertas').all().filter(i => !enviados.has(i.json.huella_unica));"
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000033",
+      "name": "Redactar Alerta",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        880,
+        400
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=Redacta un aviso interno para el DUEÑO de un negocio, en español, directo y breve (máximo 80 palabras).\n\nDatos (usa ÚNICAMENTE esta información):\n- Cliente moroso: {{ $json.contacto?.nombre || $json.cliente }}\n- Factura: {{ $json.numero_factura }}{{ $json.concepto ? ' (' + $json.concepto + ')' : '' }}\n- Monto: {{ $json.monto }}\n- Venció el: {{ $json.fecha_vencimiento }}\n- Días sin pagar: {{ $json.dias_mora }}\n\nEl mensaje debe decir claramente que el cliente lleva esos días sin pagar esa factura y RECOMENDAR llamarlo hoy mismo. Devuelve SOLO el texto del mensaje.",
+        "options": {}
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000034",
+      "name": "Gemini Alertas",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        880,
+        600
+      ],
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "name": "MapFlow Gemini"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000035",
+      "name": "Enviar Email Dueño",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        320
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "fromEmail": "MapFlow Cobros <46moras@gmail.com>",
+        "toEmail": "={{ $('Filtrar Alertas Nuevas').item.json.empresa?.email_dueno }}",
+        "subject": "=⚠️ {{ $('Filtrar Alertas Nuevas').item.json.contacto?.nombre || $('Filtrar Alertas Nuevas').item.json.cliente }} lleva {{ $('Filtrar Alertas Nuevas').item.json.dias_mora }} días sin pagar · Factura {{ $('Filtrar Alertas Nuevas').item.json.numero_factura }}",
+        "emailFormat": "html",
+        "html": "=<div style='font-family:Arial,sans-serif;max-width:520px'><p>{{ $json.text.replaceAll('\\n', '<br>') }}</p><p style='margin:24px 0'><a href='tel:{{ ($('Filtrar Alertas Nuevas').item.json.contacto?.telefono || '').replace(/[^0-9+]/g, '') }}' style='background:#2563eb;color:#ffffff;padding:12px 22px;border-radius:8px;text-decoration:none'>📞 Llamar a {{ $('Filtrar Alertas Nuevas').item.json.contacto?.nombre || $('Filtrar Alertas Nuevas').item.json.cliente }}</a> &nbsp; <a href='https://wa.me/{{ ($('Filtrar Alertas Nuevas').item.json.contacto?.telefono || '').replace(/[^0-9]/g, '') }}' style='background:#16a34a;color:#ffffff;padding:12px 22px;border-radius:8px;text-decoration:none'>💬 WhatsApp</a></p><p style='color:#666;font-size:13px'>Factura {{ $('Filtrar Alertas Nuevas').item.json.numero_factura }} · Monto {{ $('Filtrar Alertas Nuevas').item.json.monto }} · Venció {{ $('Filtrar Alertas Nuevas').item.json.fecha_vencimiento }}</p></div>",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "name": "MapFlow Gmail"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000036",
+      "name": "Enviar WhatsApp Dueño",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        520
+      ],
+      "disabled": true,
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "",
+        "recipientPhoneNumber": "={{ $('Filtrar Alertas Nuevas').item.json.empresa?.telefono_dueno }}",
+        "textBody": "={{ $json.text }}"
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000037",
+      "name": "Registrar Alerta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1380,
+        240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://qnsuaycfryruebclgavv.supabase.co/rest/v1/mensajes_agente?on_conflict=id_empresa,huella_unica",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id_empresa: $('Filtrar Alertas Nuevas').item.json.id_empresa, id_factura: $('Filtrar Alertas Nuevas').item.json.id, id_contacto: $('Filtrar Alertas Nuevas').item.json.id_contacto, tipo_accion: 'alerta_dueno', canal: 'email', direccion: 'saliente', mensaje_entrante: null, mensaje_generado: $('Redactar Alerta').item.json.text, destinatario: $('Filtrar Alertas Nuevas').item.json.empresa?.email_dueno, estado_envio: 'enviado', huella_unica: $('Filtrar Alertas Nuevas').item.json.huella_unica }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f2b6a1e-0d3c-4f5a-8b1e-100000000038",
+      "name": "Registrar Alerta Fallida",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1380,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://qnsuaycfryruebclgavv.supabase.co/rest/v1/mensajes_agente?on_conflict=id_empresa,huella_unica",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id_empresa: $('Filtrar Alertas Nuevas').item.json.id_empresa, id_factura: $('Filtrar Alertas Nuevas').item.json.id, id_contacto: $('Filtrar Alertas Nuevas').item.json.id_contacto, tipo_accion: 'alerta_dueno', canal: 'email', direccion: 'saliente', mensaje_entrante: null, mensaje_generado: $('Redactar Alerta').item.json.text, destinatario: $('Filtrar Alertas Nuevas').item.json.empresa?.email_dueno, estado_envio: 'fallido', huella_unica: $('Filtrar Alertas Nuevas').item.json.huella_unica + ':fallido:' + $now.toMillis() }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "name": "MapFlow Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Chat Web": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Chat Web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cron Diario 8am": {
+      "main": [
+        [
+          {
+            "node": "Preparar Ciclos Diarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Telegram": {
+      "main": [
+        [
+          {
+            "node": "Separar Ramas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Chat Web": {
+      "main": [
+        [
+          {
+            "node": "Separar Ramas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Ciclos Diarios": {
+      "main": [
+        [
+          {
+            "node": "Separar Ramas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar Ramas": {
+      "main": [
+        [
+          {
+            "node": "Identificar Empresa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Buscar Facturas por Cobrar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Buscar Facturas Morosas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identificar Empresa": {
+      "main": [
+        [
+          {
+            "node": "Preparar Consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Consulta": {
+      "main": [
+        [
+          {
+            "node": "Agente Consultas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Consultas": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Consultas",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Facturas": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Consultas",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Contactos": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Consultas",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Movimientos": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Consultas",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente Consultas": {
+      "main": [
+        [
+          {
+            "node": "¿Responder por Telegram?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Responder por Telegram?": {
+      "main": [
+        [
+          {
+            "node": "Responder Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Chat Web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder Telegram": {
+      "main": [
+        [
+          {
+            "node": "Registrar Consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder Chat Web": {
+      "main": [
+        [
+          {
+            "node": "Registrar Consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Facturas por Cobrar": {
+      "main": [
+        [
+          {
+            "node": "Preparar Recordatorios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Recordatorios": {
+      "main": [
+        [
+          {
+            "node": "Verificar Enviados Hoy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Enviados Hoy": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Ya Enviados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Ya Enviados": {
+      "main": [
+        [
+          {
+            "node": "Redactar Recordatorio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Recordatorios": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Redactar Recordatorio",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redactar Recordatorio": {
+      "main": [
+        [
+          {
+            "node": "Enviar Email Deudor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Email Deudor": {
+      "main": [
+        [
+          {
+            "node": "Registrar Recordatorio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Recordatorio Fallido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Facturas Morosas": {
+      "main": [
+        [
+          {
+            "node": "Preparar Alertas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Alertas": {
+      "main": [
+        [
+          {
+            "node": "Verificar Alertas Enviadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Alertas Enviadas": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Alertas Nuevas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Alertas Nuevas": {
+      "main": [
+        [
+          {
+            "node": "Redactar Alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Alertas": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Redactar Alerta",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redactar Alerta": {
+      "main": [
+        [
+          {
+            "node": "Enviar Email Dueño",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Email Dueño": {
+      "main": [
+        [
+          {
+            "node": "Registrar Alerta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Alerta Fallida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
