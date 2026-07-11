@@ -30,17 +30,28 @@ export function MovimientosCliente({
   filas,
   deudas,
   tabInicial,
+  desdeInicial = "",
+  hastaInicial = "",
 }: {
   filas: FilaDinero[];
   deudas: DeudaDetalle[];
   tabInicial: TabDetalle;
+  desdeInicial?: string; // el rango puede venir preaplicado por URL
+  hastaInicial?: string;
 }) {
   const [tab, setTab] = useState<TabDetalle>(tabInicial);
   const [filtroDeuda, setFiltroDeuda] = useState<FiltroDeuda>("todas");
+  // Filtro de calendario: aplica a las tres subpestañas
+  const [desde, setDesde] = useState(desdeInicial);
+  const [hasta, setHasta] = useState(hastaInicial);
 
-  const ingresos = filas.filter((f) => f.esIngreso);
-  const egresos = filas.filter((f) => !f.esIngreso);
-  const deudasVisibles = deudas.filter(
+  const enRango = (fecha: string) =>
+    (!desde || fecha >= desde) && (!hasta || fecha <= hasta);
+
+  const ingresos = filas.filter((f) => f.esIngreso && enRango(f.fecha));
+  const egresos = filas.filter((f) => !f.esIngreso && enRango(f.fecha));
+  const deudasFiltradas = deudas.filter((d) => enRango(d.fecha_vencimiento));
+  const deudasVisibles = deudasFiltradas.filter(
     (d) =>
       filtroDeuda === "todas" ||
       (filtroDeuda === "cobros" && d.esCobro) ||
@@ -90,7 +101,7 @@ export function MovimientosCliente({
           [
             { id: "ingresos", label: "Ingresos", icono: "trending_up", n: ingresos.length },
             { id: "egresos", label: "Egresos", icono: "payments", n: egresos.length },
-            { id: "deudas", label: "Deudas", icono: "account_balance_wallet", n: deudas.length },
+            { id: "deudas", label: "Deudas", icono: "account_balance_wallet", n: deudasFiltradas.length },
           ] as const
         ).map((t) => (
           <button
@@ -118,6 +129,45 @@ export function MovimientosCliente({
             </span>
           </button>
         ))}
+      </div>
+
+      {/* Filtro de calendario: rango de fechas para las 3 subpestañas */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-outline-variant bg-surface p-4">
+        <Icon name="calendar_month" className="text-[20px] text-on-surface-variant" />
+        <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+          Rango:
+        </span>
+        <input
+          type="date"
+          value={desde}
+          onChange={(e) => setDesde(e.target.value)}
+          aria-label="Desde"
+          className="rounded-lg border border-primary-container bg-surface-container-low p-2 text-sm font-light text-on-surface outline-none focus:ring-2 focus:ring-primary"
+        />
+        <span className="text-xs font-light text-on-surface-variant">a</span>
+        <input
+          type="date"
+          value={hasta}
+          onChange={(e) => setHasta(e.target.value)}
+          aria-label="Hasta"
+          className="rounded-lg border border-primary-container bg-surface-container-low p-2 text-sm font-light text-on-surface outline-none focus:ring-2 focus:ring-primary"
+        />
+        {(desde || hasta) && (
+          <button
+            type="button"
+            onClick={() => {
+              setDesde("");
+              setHasta("");
+            }}
+            className="flex items-center gap-1 rounded-lg bg-surface-container-high px-3 py-1.5 text-xs font-light text-on-surface-variant transition-colors hover:bg-surface-container-highest"
+          >
+            <Icon name="close" className="text-[14px]" />
+            Limpiar
+          </button>
+        )}
+        <span className="ml-auto text-xs font-light text-on-surface-variant">
+          {!desde && !hasta ? "Mostrando todo el historial" : "Rango aplicado"}
+        </span>
       </div>
 
       {/* Filtro cobros/pagos (solo Deudas) */}

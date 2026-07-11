@@ -103,7 +103,7 @@ function SaludPresupuesto({
             href="/presupuestos"
             className="mt-1 flex items-center justify-end gap-1 text-xs font-bold uppercase tracking-wider text-primary hover:underline"
           >
-            Gestionar presupuestos
+            Gestionar presupuesto
             <Icon name="arrow_forward" className="text-[14px]" />
           </Link>
         </div>
@@ -142,8 +142,9 @@ function SaludPresupuesto({
   );
 }
 
+// Por defecto siempre el MES ACTUAL; el resto son miradas hacia atrás
 const RANGOS: { id: Exclude<Rango, "custom">; label: string; meses: number }[] = [
-  { id: "1m", label: "1 mes", meses: 1 },
+  { id: "1m", label: "Mes actual", meses: 1 },
   { id: "3m", label: "3 meses", meses: 3 },
   { id: "6m", label: "6 meses", meses: 6 },
   { id: "1a", label: "1 año", meses: 12 },
@@ -166,7 +167,7 @@ export function ReportesCliente({
   mostrarPresupuestos: boolean;
 }) {
   const hoy = hoyISO();
-  const [rango, setRango] = useState<Rango>("6m");
+  const [rango, setRango] = useState<Rango>("1m");
   const [desdeCustom, setDesdeCustom] = useState("");
   const [hastaCustom, setHastaCustom] = useState("");
   const [calendarioAbierto, setCalendarioAbierto] = useState(false);
@@ -376,9 +377,10 @@ export function ReportesCliente({
         />
       )}
 
-      {/* ===== Gráfica (sin título) con filtros de series debajo ===== */}
+      {/* ===== Gráfica (sin título) con filtros de series debajo.
+             Con el módulo de presupuesto apagado, esa serie ni aparece ===== */}
       <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-level-1">
-        <GraficaFlujo datos={flujo} conFiltros />
+        <GraficaFlujo datos={flujo} conFiltros conPresupuesto={mostrarPresupuestos} />
       </div>
     </div>
   );

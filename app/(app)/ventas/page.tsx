@@ -216,14 +216,22 @@ export default async function VentasPage({
 
       {/* Totales del periodo */}
       <div className="grid gap-6 sm:grid-cols-2">
-        <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-level-1">
-          <div className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+        {/* Clic → Detalle financiero (Ingresos) con ESTE mismo rango */}
+        <Link
+          href={`/movimientos?tab=ingresos&desde=${desde}&hasta=${hasta}`}
+          className="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-level-1 transition-colors hover:border-primary"
+        >
+          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-on-surface-variant">
             Ventas realizadas
+            <Icon name="arrow_forward" className="text-[16px] text-primary" />
           </div>
           <div className="mt-2 text-4xl font-bold tabular-nums text-on-surface">
             {totalVentas}
           </div>
-        </div>
+          <div className="mt-1 text-xs font-bold uppercase tracking-wider text-primary">
+            Ver detalle de ingresos
+          </div>
+        </Link>
         <div className="rounded-xl border border-secondary-container bg-secondary-container/30 p-6 shadow-level-1">
           <div className="text-xs font-bold uppercase tracking-wider text-on-secondary-container">
             Monto total

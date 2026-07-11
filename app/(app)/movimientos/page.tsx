@@ -14,7 +14,7 @@ import {
 export default async function MovimientosPage({
   searchParams,
 }: {
-  searchParams?: { tab?: string };
+  searchParams?: { tab?: string; desde?: string; hasta?: string };
 }) {
   const supabase = createSupabaseServer();
   const {
@@ -86,7 +86,17 @@ export default async function MovimientosPage({
     ? (searchParams?.tab as TabDetalle)
     : "ingresos";
 
+  // El rango puede llegar en la URL (ej. desde "Ventas realizadas")
+  const esISO = (s: string | undefined): s is string =>
+    /^\d{4}-\d{2}-\d{2}$/.test(s ?? "");
+
   return (
-    <MovimientosCliente filas={filas} deudas={deudas} tabInicial={tabInicial} />
+    <MovimientosCliente
+      filas={filas}
+      deudas={deudas}
+      tabInicial={tabInicial}
+      desdeInicial={esISO(searchParams?.desde) ? searchParams!.desde! : ""}
+      hastaInicial={esISO(searchParams?.hasta) ? searchParams!.hasta! : ""}
+    />
   );
 }
