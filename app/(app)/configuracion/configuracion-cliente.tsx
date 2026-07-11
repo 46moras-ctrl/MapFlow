@@ -418,7 +418,7 @@ export function ConfiguracionCliente({
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-4xl font-bold tracking-tight text-on-surface">
-          Configuración
+          Ajustes
         </h1>
         <p className="mt-1 text-lg font-light text-on-surface-variant">
           Ajusta MapFlow a la medida de tu negocio.

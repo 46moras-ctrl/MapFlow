@@ -15,8 +15,10 @@ import { cn } from "@/lib/utils";
 
 type Serie = "ingresos" | "egresos" | "presupuesto" | "deudas";
 
-// Ingresos y egresos usan los 2 colores de marca; presupuesto es
-// una línea de referencia punteada y deudas un tono acento suave.
+// Mapeo fijo de colores: INGRESOS = color primario de la marca,
+// EGRESOS = secundario, DEUDAS = el rosado de Pendientes.
+// Presupuesto es una línea de referencia punteada (solo si el
+// módulo está activo).
 const SERIES: {
   id: Serie;
   label: string;
@@ -26,8 +28,8 @@ const SERIES: {
 }[] = [
   { id: "ingresos", label: "Ingresos", color: "hsl(var(--primary))", conArea: true },
   { id: "egresos", label: "Egresos", color: "hsl(var(--secondary))", conArea: true },
+  { id: "deudas", label: "Deudas", color: "#EFBBD0", conArea: true },
   { id: "presupuesto", label: "Presupuesto", color: "#8D9286", conArea: false, punteada: true },
-  { id: "deudas", label: "Deudas", color: "#7B5264", conArea: true },
 ];
 
 /** Curva suave (catmull-rom → bézier cúbica) que pasa por los puntos */
@@ -55,18 +57,24 @@ function areaSuave(puntos: { x: number; y: number }[], baseY: number): string {
 export function GraficaFlujo({
   datos,
   conFiltros = false,
+  conPresupuesto = true,
 }: {
   datos: PuntoFlujo[];
   conFiltros?: boolean;
+  conPresupuesto?: boolean; // false = módulo apagado: ni serie ni botón
 }) {
   const [activas, setActivas] = useState<Record<Serie, boolean>>({
     ingresos: true,
     egresos: true,
-    presupuesto: conFiltros, // en el Dashboard basta ingresos vs egresos
-    deudas: conFiltros,
+    deudas: true,
+    presupuesto: conFiltros && conPresupuesto,
   });
 
-  const visibles = SERIES.filter((s) => activas[s.id]);
+  // Con el módulo de presupuestos apagado, esa serie no existe
+  const seriesDisponibles = SERIES.filter(
+    (s) => s.id !== "presupuesto" || conPresupuesto
+  );
+  const visibles = seriesDisponibles.filter((s) => activas[s.id]);
 
   // Lienzo: viewBox fijo, se estira al ancho de la tarjeta
   const W = 720;
@@ -186,7 +194,7 @@ export function GraficaFlujo({
 
       {/* Leyenda (sin filtros) o filtros por serie (Reportes) */}
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        {SERIES.map((s) =>
+        {seriesDisponibles.map((s) =>
           conFiltros ? (
             <button
               key={s.id}

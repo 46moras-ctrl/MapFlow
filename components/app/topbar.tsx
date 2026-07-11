@@ -8,15 +8,15 @@ import type { Alerta, NivelAlerta } from "@/lib/alertas";
 import { cn } from "@/lib/utils";
 
 const titulos: [string, string][] = [
-  ["/dashboard", "Dashboard"],
+  ["/dashboard", "Inicio"],
   ["/facturas/", "Detalle de Factura"],
   ["/facturas", "Facturas"],
   ["/pendientes", "Pendientes"],
   ["/reportes", "Reportes"],
-  ["/presupuestos", "Presupuestos"],
+  ["/presupuestos", "Presupuesto"],
   ["/movimientos", "Detalle financiero"],
   ["/ventas", "Ventas"],
-  ["/configuracion", "Configuración"],
+  ["/configuracion", "Ajustes"],
 ];
 
 // Estilos por nivel: PAGAR llamativo y escalonado, COBRAR discreto

@@ -32,6 +32,7 @@ export default async function DashboardPage() {
   let ventasHoy = 0;
   let totalVentasHoy = 0;
   let filas: FilaDinero[] = [];
+  let deudas: { fecha: string; monto: number }[] = [];
 
   if (empresa) {
     const [cobrosRes, pagosRes, ventasMovsRes, ventasFactsRes, movsRes, factsRes] = await Promise.all([
@@ -73,12 +74,12 @@ export default async function DashboardPage() {
         .eq("id_empresa", empresa.id)
         .in("tipo", ["ingreso", "egreso", "pago"])
         .limit(1000),
-      // Para la gráfica: facturas pagadas
+      // Para la gráfica: todas las facturas (pagadas alimentan
+      // ingresos/egresos; las no pagadas, la serie de deudas)
       supabase
         .from("facturas")
-        .select("id, tipo, monto, fecha_emision, fecha_vencimiento")
-        .eq("id_empresa", empresa.id)
-        .eq("estado", "pagado"),
+        .select("id, tipo, monto, estado, fecha_emision, fecha_vencimiento")
+        .eq("id_empresa", empresa.id),
     ]);
     porCobrar = cobrosRes.count ?? 0;
     porPagar = pagosRes.count ?? 0;
@@ -90,6 +91,7 @@ export default async function DashboardPage() {
       ingresosDia.reduce((s, v) => s + Number(v.monto), 0) +
       cobrosDia.reduce((s, f) => s + Number(f.monto), 0);
 
+    const facturas = factsRes.data ?? [];
     filas = [
       ...(movsRes.data ?? []).map((m) => ({
         id: `m-${m.id}`,
@@ -99,18 +101,27 @@ export default async function DashboardPage() {
         contraparte: "",
         categoria: "",
       })),
-      ...(factsRes.data ?? []).map((f) => ({
-        id: `f-${f.id}`,
+      ...facturas
+        .filter((f) => f.estado === "pagado")
+        .map((f) => ({
+          id: `f-${f.id}`,
+          fecha: (f.fecha_vencimiento ?? f.fecha_emision) as string,
+          monto: Number(f.monto),
+          esIngreso: f.tipo === "cobrar",
+          contraparte: "",
+          categoria: "",
+        })),
+    ];
+    // Serie de deudas: facturas sin pagar, por mes de vencimiento
+    deudas = facturas
+      .filter((f) => f.estado !== "pagado")
+      .map((f) => ({
         fecha: (f.fecha_vencimiento ?? f.fecha_emision) as string,
         monto: Number(f.monto),
-        esIngreso: f.tipo === "cobrar",
-        contraparte: "",
-        categoria: "",
-      })),
-    ];
+      }));
   }
 
-  const flujo = construirFlujo(ultimosMeses(12, hoy), filas, [], 0);
+  const flujo = construirFlujo(ultimosMeses(12, hoy), filas, deudas, 0);
 
   return (
     <div className="flex flex-col gap-6">

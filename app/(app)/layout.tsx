@@ -53,7 +53,7 @@ export default async function AppLayout({
       {/* Colores de marca del dueño, aplicados a toda la plataforma */}
       <TemaMarca colores={empresa?.colores_marca} />
       {/* Escritorio: sidebar · Móvil: barra inferior */}
-      <Sidebar mostrarPresupuestos={Boolean(empresa?.mostrar_presupuestos)} />
+      <Sidebar />
       <div className="ml-0 md:ml-64">
         <Topbar alertas={alertas} empresa={empresa} />
         {/* pb extra en móvil para que la BottomNav no tape contenido */}

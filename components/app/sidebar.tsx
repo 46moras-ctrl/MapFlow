@@ -8,25 +8,19 @@ import { cn } from "@/lib/utils";
 
 // SideNavBar (DESIGN.md §8.1): 256px fija, fondo surface-container-low.
 // Solo en pantallas md+: en móvil la navegación vive en BottomNav.
-export function Sidebar({
-  mostrarPresupuestos = false,
-}: {
-  mostrarPresupuestos?: boolean;
-}) {
+// Exactamente 5 páginas; Presupuestos NO va en el menú (vive
+// dentro de Reportes cuando el módulo está activo).
+const navItems = [
+  { href: "/dashboard", label: "Inicio", icon: "dashboard" },
+  { href: "/facturas", label: "Facturas", icon: "description" },
+  { href: "/pendientes", label: "Pendientes", icon: "pending_actions" },
+  { href: "/reportes", label: "Reportes", icon: "analytics" },
+  { href: "/configuracion", label: "Ajustes", icon: "settings" },
+];
+
+export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-
-  const navItems = [
-    { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
-    { href: "/facturas", label: "Facturas", icon: "description" },
-    { href: "/pendientes", label: "Pendientes", icon: "pending_actions" },
-    { href: "/reportes", label: "Reportes", icon: "analytics" },
-    // El módulo de presupuestos se activa desde Configuración
-    ...(mostrarPresupuestos
-      ? [{ href: "/presupuestos", label: "Presupuestos", icon: "savings" }]
-      : []),
-    { href: "/configuracion", label: "Configuración", icon: "settings" },
-  ];
 
   async function cerrarSesion() {
     await getSupabaseClient().auth.signOut();

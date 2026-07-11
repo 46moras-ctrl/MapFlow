@@ -11,14 +11,12 @@ import { cn } from "@/lib/utils";
 // central "+" que abre directo el formulario de Nueva Factura.
 // ============================================================
 
-const izquierda = [
+const destinos = [
   { href: "/dashboard", label: "Inicio", icon: "dashboard" },
   { href: "/facturas", label: "Facturas", icon: "description" },
-];
-
-const derecha = [
   { href: "/pendientes", label: "Pendientes", icon: "pending_actions" },
   { href: "/reportes", label: "Reportes", icon: "analytics" },
+  { href: "/configuracion", label: "Ajustes", icon: "settings" },
 ];
 
 function ItemNav({
@@ -52,11 +50,7 @@ export function BottomNav() {
       aria-label="Navegación principal"
       className="fixed inset-x-0 bottom-0 z-30 flex items-center border-t border-outline-variant bg-surface-container-lowest pb-[env(safe-area-inset-bottom)] shadow-level-2 md:hidden"
     >
-      {izquierda.map((item) => (
-        <ItemNav key={item.href} item={item} activo={esActivo(item.href)} />
-      ))}
-
-      {/* Botón central: Nueva Factura (ingreso rápido) */}
+      {/* [ + ] primero, en la esquina izquierda: ingreso rápido */}
       <div className="flex flex-1 justify-center">
         <Link
           href="/facturas?nueva=1"
@@ -67,13 +61,9 @@ export function BottomNav() {
         </Link>
       </div>
 
-      {derecha.map((item) => (
+      {destinos.map((item) => (
         <ItemNav key={item.href} item={item} activo={esActivo(item.href)} />
       ))}
-      <ItemNav
-        item={{ href: "/configuracion", label: "Ajustes", icon: "settings" }}
-        activo={esActivo("/configuracion")}
-      />
     </nav>
   );
 }
