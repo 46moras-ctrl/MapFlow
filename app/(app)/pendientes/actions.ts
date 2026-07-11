@@ -215,6 +215,115 @@ export async function completarPlan(
   return { ok: true };
 }
 
+/**
+ * PAGO CON CRÉDITO: el crédito no cierra el saldo, lo TRASLADA
+ * del proveedor al banco.
+ *  1. El pendiente original queda COMPLETADO y su factura PAGADA
+ *     (el banco le pagó al proveedor).
+ *  2. Se crea UNA factura nueva por el total, con contacto = la
+ *     entidad bancaria, y su plan de pago con las cuotas y fechas
+ *     adentro → sigue viva en Pendientes como deuda con el banco.
+ */
+export async function completarPlanConCredito(
+  id: string,
+  datos: { cuotas: number; fechas: string[]; entidad: string }
+): Promise<Resultado> {
+  const entidad = datos.entidad?.trim();
+  if (!entidad) return { ok: false, error: "Escribe la entidad bancaria." };
+  const n = Math.trunc(datos.cuotas);
+  if (!Number.isInteger(n) || n < 1 || n > 48)
+    return { ok: false, error: "Indica entre 1 y 48 cuotas." };
+  const fechas = (datos.fechas ?? []).filter(Boolean);
+  if (fechas.length === 0)
+    return { ok: false, error: "Indica al menos una fecha de cuota." };
+
+  const ctx = await contextoEmpresa();
+  if ("error" in ctx) return { ok: false, error: ctx.error };
+
+  const { data: plan } = await ctx.supabase
+    .from("planes_pago")
+    .select("id, id_factura, factura:facturas(id, numero_factura, cliente, monto, concepto)")
+    .eq("id", id)
+    .eq("id_empresa", ctx.empresaId)
+    .maybeSingle();
+  const factura = (plan as {
+    factura?: {
+      id: string;
+      numero_factura: string;
+      cliente: string;
+      monto: number;
+      concepto: string | null;
+    } | null;
+  } | null)?.factura;
+  if (!plan || !factura)
+    return { ok: false, error: "No se encontró el pendiente." };
+
+  const hoy = new Date().toISOString().slice(0, 10);
+  const primeraCuota = [...fechas].sort()[0];
+
+  // 1. Nueva factura: la deuda con el banco (UNA sola, por el total)
+  const { data: nueva, error: errorNueva } = await ctx.supabase
+    .from("facturas")
+    .insert({
+      id_empresa: ctx.empresaId,
+      numero_factura: `CRED-${factura.numero_factura}`,
+      cliente: entidad,
+      monto: factura.monto,
+      fecha_emision: hoy,
+      fecha_vencimiento: primeraCuota,
+      concepto: `Crédito con ${entidad} — pago de ${factura.numero_factura} a ${factura.cliente}${n > 1 ? ` (${n} cuotas)` : ""}`,
+      tipo: "pagar",
+      id_factura_origen: factura.id,
+      estado: "pendiente",
+    })
+    .select("id")
+    .single();
+  if (errorNueva || !nueva) {
+    if (errorNueva?.code === "23505")
+      return {
+        ok: false,
+        error: "El crédito de esta factura ya fue registrado antes. No se duplicó.",
+      };
+    return { ok: false, error: "No se pudo crear la deuda con el banco." };
+  }
+
+  // 2. Su plan de pago: las cuotas y fechas viven adentro
+  await ctx.supabase.from("planes_pago").insert({
+    id_empresa: ctx.empresaId,
+    id_factura: nueva.id,
+    tipo: "pago",
+    cuotas: n,
+    fechas_pago: fechas,
+    contacto_nombre: entidad,
+    metodo_pago: null,
+    detalle_metodo: `Crédito ${entidad}`,
+    destino_envio: "contacto",
+    estado: "activo",
+  });
+
+  // 3. Solo con la deuda nueva creada, se salda la del proveedor
+  const { error } = await ctx.supabase
+    .from("planes_pago")
+    .update({ estado: "completado" })
+    .eq("id", id)
+    .eq("id_empresa", ctx.empresaId);
+  if (error)
+    return {
+      ok: false,
+      error: "La deuda con el banco se creó, pero no se pudo cerrar el pendiente original.",
+    };
+
+  await ctx.supabase
+    .from("facturas")
+    .update({ estado: "pagado", medio_pago: "credito" })
+    .eq("id", plan.id_factura)
+    .eq("id_empresa", ctx.empresaId);
+
+  revalidatePath("/pendientes");
+  revalidatePath("/facturas");
+  return { ok: true };
+}
+
 export async function eliminarPlan(id: string): Promise<Resultado> {
   const ctx = await contextoEmpresa();
   if ("error" in ctx) return { ok: false, error: ctx.error };

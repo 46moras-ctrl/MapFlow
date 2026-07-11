@@ -23,9 +23,11 @@ import { cn } from "@/lib/utils";
 import {
   buscarFacturaPorCodigo,
   completarPlan,
+  completarPlanConCredito,
   eliminarPlan,
   type FacturaEncontrada,
 } from "./actions";
+import { sumarMeses } from "@/lib/facturas";
 
 // ============================================================
 // PENDIENTES — gestión de cobros (deudores) y pagos (acreedores).
@@ -61,6 +63,10 @@ export function PendientesCliente({
   const [planEnEdicion, setPlanEnEdicion] = useState<PlanConFactura | null>(null);
   // Plan que se está marcando como pagado (pregunta el medio)
   const [planAPagar, setPlanAPagar] = useState<PlanConFactura | null>(null);
+  // Paso 2 del crédito: cuotas, fechas y entidad bancaria
+  const [pasoCredito, setPasoCredito] = useState(false);
+  const [cuotasCred, setCuotasCred] = useState(1);
+  const [fechasCred, setFechasCred] = useState<string[]>([]);
 
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
   const [ocupado, startTransition] = useTransition();
@@ -99,14 +105,53 @@ export function PendientesCliente({
 
   // Chulito: primero pregunta el medio de pago; al confirmarlo, el
   // plan sale de esta lista y la factura vuelve a blanca en Facturas.
+  // CRÉDITO es especial: la deuda se traslada del proveedor al banco.
   function confirmarPago(medio: "efectivo" | "transferencia" | "tarjeta" | "credito") {
     if (!planAPagar) return;
+    if (medio === "credito") {
+      // Paso 2: cuotas, fechas y entidad bancaria
+      setCuotasCred(1);
+      setFechasCred([sumarMeses(hoy, 1)]);
+      setPasoCredito(true);
+      return;
+    }
     setErrorGeneral(null);
     startTransition(async () => {
       const res = await completarPlan(planAPagar.id, medio);
       if (!res.ok) {
         setErrorGeneral(res.error ?? "Ocurrió un error.");
       }
+      setPlanAPagar(null);
+    });
+  }
+
+  // Al cambiar las cuotas del crédito, las fechas se proponen mes a mes
+  function ajustarCuotasCred(n: number) {
+    const total = Math.max(1, Math.min(48, Math.trunc(n) || 1));
+    setCuotasCred(total);
+    setFechasCred((prev) => {
+      const base = prev[0] || sumarMeses(hoy, 1);
+      return Array.from({ length: total }, (_, i) =>
+        prev[i] ? prev[i] : sumarMeses(base, i)
+      ).slice(0, total);
+    });
+  }
+
+  function confirmarCredito(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!planAPagar) return;
+    const fd = new FormData(e.currentTarget);
+    setErrorGeneral(null);
+    startTransition(async () => {
+      const res = await completarPlanConCredito(planAPagar.id, {
+        cuotas: cuotasCred,
+        fechas: fechasCred,
+        entidad: String(fd.get("entidad") ?? ""),
+      });
+      if (!res.ok) {
+        setErrorGeneral(res.error ?? "Ocurrió un error.");
+      }
+      setPasoCredito(false);
       setPlanAPagar(null);
     });
   }
@@ -457,16 +502,21 @@ export function PendientesCliente({
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-md rounded-2xl bg-surface-container-lowest p-6 shadow-level-2">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-surface-container-lowest p-6 shadow-level-2">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-on-surface">
-                {planAPagar.tipo === "cobro"
-                  ? "¿Cómo te pagaron?"
-                  : "¿Con qué medio pagaste?"}
+                {pasoCredito
+                  ? "Pago con crédito"
+                  : planAPagar.tipo === "cobro"
+                    ? "¿Cómo te pagaron?"
+                    : "¿Con qué medio pagaste?"}
               </h2>
               <button
                 type="button"
-                onClick={() => setPlanAPagar(null)}
+                onClick={() => {
+                  setPlanAPagar(null);
+                  setPasoCredito(false);
+                }}
                 aria-label="Cerrar"
                 className="rounded-full p-2 text-on-surface-variant hover:bg-surface-variant"
               >
@@ -478,34 +528,139 @@ export function PendientesCliente({
               {planAPagar.contacto_nombre || planAPagar.factura?.cliente} ·{" "}
               {planAPagar.factura ? fmt(Number(planAPagar.factura.monto)) : ""}
             </p>
-            <p className="mt-2 text-xs font-light text-on-surface-variant">
-              Al confirmar, este pendiente sale de la lista y la factura
-              queda pagada (celda blanca) en Facturas.
-            </p>
 
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              {(
-                planAPagar.tipo === "cobro"
-                  ? (["efectivo", "transferencia", "tarjeta"] as const)
-                  : (["efectivo", "transferencia", "tarjeta", "credito"] as const)
-              ).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  disabled={ocupado}
-                  onClick={() => confirmarPago(m)}
-                  className="flex flex-col items-center gap-2 rounded-xl border border-primary-container bg-surface-container-low p-4 text-sm font-semibold text-on-surface transition-all hover:border-primary hover:shadow-level-1 active:scale-[0.98] disabled:opacity-50"
-                >
-                  <Icon name={ICONO_MEDIO[m]} className="text-[26px]" />
-                  {ETIQUETA_MEDIO[m]}
-                </button>
-              ))}
-            </div>
-            {ocupado && (
-              <div className="mt-4 flex items-center justify-center gap-2 text-sm font-light text-on-surface-variant">
-                <Icon name="progress_activity" className="animate-spin text-[18px]" />
-                Registrando pago…
-              </div>
+            {!pasoCredito ? (
+              <>
+                <p className="mt-2 text-xs font-light text-on-surface-variant">
+                  Al confirmar, este pendiente sale de la lista y la factura
+                  queda pagada (celda blanca) en Facturas.
+                </p>
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  {(
+                    planAPagar.tipo === "cobro"
+                      ? (["efectivo", "transferencia", "tarjeta"] as const)
+                      : (["efectivo", "transferencia", "tarjeta", "credito"] as const)
+                  ).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      disabled={ocupado}
+                      onClick={() => confirmarPago(m)}
+                      className={cn(
+                        "flex flex-col items-center gap-2 rounded-xl border p-4 text-sm font-semibold transition-all hover:shadow-level-1 active:scale-[0.98] disabled:opacity-50",
+                        m === "credito"
+                          ? "border-tertiary-container bg-tertiary-container/30 text-on-tertiary-container hover:border-tertiary"
+                          : "border-primary-container bg-surface-container-low text-on-surface hover:border-primary"
+                      )}
+                    >
+                      <Icon name={ICONO_MEDIO[m]} className="text-[26px]" />
+                      {ETIQUETA_MEDIO[m]}
+                      {m === "credito" && (
+                        <span className="text-[10px] font-light text-on-tertiary-container">
+                          la deuda pasa al banco
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {ocupado && (
+                  <div className="mt-4 flex items-center justify-center gap-2 text-sm font-light text-on-surface-variant">
+                    <Icon name="progress_activity" className="animate-spin text-[18px]" />
+                    Registrando pago…
+                  </div>
+                )}
+              </>
+            ) : (
+              <form onSubmit={confirmarCredito} className="mt-4 flex flex-col gap-4">
+                <div className="rounded-lg border border-tertiary-container bg-tertiary-container/20 px-4 py-3 text-sm font-light leading-relaxed text-on-tertiary-container">
+                  <strong className="font-semibold">
+                    El crédito no cierra el saldo: lo traslada al banco.
+                  </strong>{" "}
+                  Este pendiente con el proveedor queda pagado y se crea una
+                  nueva deuda con la entidad, con sus cuotas, que seguirá viva
+                  aquí en Pendientes.
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                    Entidad bancaria *
+                  </label>
+                  <input
+                    name="entidad"
+                    required
+                    placeholder="Ej: Bancolombia"
+                    className="mt-1 w-full rounded-lg border border-primary-container bg-surface-container-low p-3 text-sm font-light text-on-surface outline-none focus:border-transparent focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                      Cuotas *
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={48}
+                      required
+                      value={cuotasCred}
+                      onChange={(e) => ajustarCuotasCred(Number(e.target.value))}
+                      className="mt-1 w-full rounded-lg border border-primary-container bg-surface-container-low p-3 text-sm tabular-nums text-on-surface outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                      Fecha{cuotasCred > 1 ? "s" : ""} de pago *
+                    </label>
+                    <div className="mt-1 flex max-h-36 flex-col gap-2 overflow-y-auto">
+                      {fechasCred.map((f, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          {cuotasCred > 1 && (
+                            <span className="w-14 shrink-0 text-xs font-light text-on-surface-variant">
+                              Cuota {i + 1}
+                            </span>
+                          )}
+                          <input
+                            type="date"
+                            required
+                            value={f}
+                            onChange={(e) =>
+                              setFechasCred((prev) =>
+                                prev.map((x, j) => (j === i ? e.target.value : x))
+                              )
+                            }
+                            className="w-full rounded-lg border border-primary-container bg-surface-container-low p-2.5 text-sm font-light text-on-surface outline-none focus:ring-2 focus:ring-primary"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPasoCredito(false)}
+                    className="rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-wider text-on-surface-variant transition-colors hover:bg-surface-variant"
+                  >
+                    Atrás
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={ocupado}
+                    className="flex items-center gap-2 rounded-xl bg-secondary px-6 py-3 text-xs font-bold uppercase tracking-wider text-on-secondary transition-opacity hover:opacity-90 disabled:opacity-60"
+                  >
+                    {ocupado ? (
+                      <>
+                        <Icon name="progress_activity" className="animate-spin text-[16px]" />
+                        Trasladando deuda…
+                      </>
+                    ) : (
+                      "Confirmar crédito"
+                    )}
+                  </button>
+                </div>
+              </form>
             )}
           </div>
         </div>
