@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { Icon } from "@/components/app/icon";
-import { fmt, formatearFecha } from "@/lib/facturas";
+import { fmt, formatearFecha, hoyISO } from "@/lib/facturas";
+import { ultimosMeses } from "@/lib/finanzas";
 import { cn } from "@/lib/utils";
 import {
   crearPresupuesto,
@@ -12,10 +13,22 @@ import {
 } from "./actions";
 
 // ============================================================
-// PRESUPUESTOS — registro (botón superior derecho) y listado
-// de todos los presupuestos: detalle, monto, periodo, alerta,
-// gastado del mes y fecha de registro.
+// PRESUPUESTOS — registro (botón superior derecho), botón
+// "Detalle" hacia la página de Egresos, barra de filtros de
+// tiempo, y listado de presupuestos. REGLA: TODOS los egresos
+// registrados se descuentan del presupuesto (sin categorías);
+// el rango por defecto es el mes actual y se reinicia cada mes.
 // ============================================================
+
+type Rango = "1m" | "3m" | "6m" | "1a" | "total" | "custom";
+
+const RANGOS: { id: Exclude<Rango, "custom">; label: string; meses: number }[] = [
+  { id: "1m", label: "Mes actual", meses: 1 },
+  { id: "3m", label: "3 meses", meses: 3 },
+  { id: "6m", label: "6 meses", meses: 6 },
+  { id: "1a", label: "1 año", meses: 12 },
+  { id: "total", label: "Total", meses: 0 },
+];
 
 export interface PresupuestoDB {
   id: string;
@@ -35,20 +48,46 @@ const ETIQUETA_PERIODO: Record<PresupuestoDB["periodo"], string> = {
 
 export function PresupuestosCliente({
   presupuestos,
-  gastosMes,
+  egresos,
 }: {
   presupuestos: PresupuestoDB[];
-  gastosMes: { categoria: string | null; monto: number }[];
+  egresos: { fecha: string; monto: number }[];
 }) {
+  const hoy = hoyISO();
   const [modalAbierto, setModalAbierto] = useState(false);
   const [aEliminar, setAEliminar] = useState<PresupuestoDB | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ocupado, startTransition] = useTransition();
 
-  const gastado = (categoria: string) =>
-    gastosMes
-      .filter((g) => (g.categoria ?? "").toLowerCase() === categoria.toLowerCase())
-      .reduce((s, g) => s + Number(g.monto), 0);
+  // Barra de filtros de tiempo (por defecto, el mes actual)
+  const [rango, setRango] = useState<Rango>("1m");
+  const [desdeCustom, setDesdeCustom] = useState("");
+  const [hastaCustom, setHastaCustom] = useState("");
+  const [calendarioAbierto, setCalendarioAbierto] = useState(false);
+
+  const { desde, hasta } = useMemo(() => {
+    if (rango === "custom" && desdeCustom && hastaCustom)
+      return { desde: desdeCustom, hasta: hastaCustom };
+    if (rango === "total") return { desde: "", hasta: hoy };
+    const n = RANGOS.find((r) => r.id === rango)?.meses ?? 1;
+    return { desde: `${ultimosMeses(n, hoy)[0]}-01`, hasta: hoy };
+  }, [rango, desdeCustom, hastaCustom, hoy]);
+
+  // TODOS los egresos del rango se descuentan del presupuesto
+  const gastadoRango = useMemo(
+    () =>
+      egresos
+        .filter((e) => (!desde || e.fecha >= desde) && e.fecha <= hasta)
+        .reduce((s, e) => s + e.monto, 0),
+    [egresos, desde, hasta]
+  );
+
+  function aplicarCalendario(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!desdeCustom || !hastaCustom) return;
+    setRango("custom");
+    setCalendarioAbierto(false);
+  }
 
   function guardar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -104,18 +143,94 @@ export function PresupuestosCliente({
             Ponle un tope a cada categoría y MapFlow te avisa antes de pasarte.
           </p>
         </div>
-        {/* Registro: botón superior derecho */}
+        <div className="flex items-center gap-2">
+          {/* Detalle → página de Egresos con el rango elegido
+              (el mismo camino que hace Ventas hacia Ingresos) */}
+          <Link
+            href={`/movimientos?tab=egresos&desde=${desde}&hasta=${hasta}`}
+            className="flex items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-xs font-bold uppercase tracking-wider text-on-surface-variant transition-colors hover:bg-surface-container"
+          >
+            <Icon name="payments" className="text-[18px]" />
+            Detalle
+          </Link>
+          {/* Registro: botón superior derecho */}
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setModalAbierto(true);
+            }}
+            className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-xs font-bold uppercase tracking-wider text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
+          >
+            <Icon name="add" className="text-[18px]" />
+            Registrar presupuesto
+          </button>
+        </div>
+      </div>
+
+      {/* Barra de filtros de tiempo */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-outline-variant bg-surface p-4">
+        <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+          Periodo:
+        </span>
+        {RANGOS.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => setRango(r.id)}
+            className={
+              rango === r.id
+                ? "rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-on-primary"
+                : "rounded-lg bg-surface-container-high px-3 py-1.5 text-xs font-light text-on-surface-variant transition-colors hover:bg-surface-container-highest"
+            }
+          >
+            {r.label}
+          </button>
+        ))}
         <button
           type="button"
-          onClick={() => {
-            setError(null);
-            setModalAbierto(true);
-          }}
-          className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-xs font-bold uppercase tracking-wider text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
+          onClick={() => setCalendarioAbierto((v) => !v)}
+          aria-expanded={calendarioAbierto}
+          className={cn(
+            "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-colors",
+            rango === "custom"
+              ? "bg-primary font-bold text-on-primary"
+              : "bg-surface-container-high font-light text-on-surface-variant hover:bg-surface-container-highest"
+          )}
         >
-          <Icon name="add" className="text-[18px]" />
-          Registrar presupuesto
+          <Icon name="calendar_month" className="text-[16px]" />
+          Calendario
         </button>
+        {calendarioAbierto && (
+          <form onSubmit={aplicarCalendario} className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              value={desdeCustom}
+              onChange={(e) => setDesdeCustom(e.target.value)}
+              required
+              aria-label="Desde"
+              className="rounded-lg border border-primary-container bg-surface-container-low p-2 text-sm font-light text-on-surface outline-none focus:ring-2 focus:ring-primary"
+            />
+            <span className="text-xs font-light text-on-surface-variant">a</span>
+            <input
+              type="date"
+              value={hastaCustom}
+              onChange={(e) => setHastaCustom(e.target.value)}
+              required
+              aria-label="Hasta"
+              className="rounded-lg border border-primary-container bg-surface-container-low p-2 text-sm font-light text-on-surface outline-none focus:ring-2 focus:ring-primary"
+            />
+            <button
+              type="submit"
+              className="rounded-xl bg-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-on-primary transition-opacity hover:opacity-90"
+            >
+              Aplicar
+            </button>
+          </form>
+        )}
+        <span className="ml-auto text-xs font-light text-on-surface-variant">
+          Egresos del periodo: <strong className="font-bold">{fmt(gastadoRango)}</strong>
+        </span>
       </div>
 
       {error && !modalAbierto && (
@@ -154,14 +269,16 @@ export function PresupuestosCliente({
                 <th className="px-6 py-3">Detalle</th>
                 <th className="px-6 py-3 text-right">Monto tope</th>
                 <th className="px-6 py-3">Periodo</th>
-                <th className="px-6 py-3">Gastado este mes</th>
+                <th className="px-6 py-3">Gastado en el periodo</th>
                 <th className="px-6 py-3">Registrado</th>
                 <th className="px-6 py-3 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant">
               {presupuestos.map((p) => {
-                const g = gastado(p.categoria);
+                // TODOS los egresos del periodo descuentan de cada
+                // presupuesto (regla global, sin categorías)
+                const g = gastadoRango;
                 const pct = Math.round((g / Number(p.monto_tope)) * 100);
                 const enAlerta = pct >= (p.alerta_porcentaje ?? 80);
                 return (

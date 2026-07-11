@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
-import { hoyISO } from "@/lib/facturas";
 import { PresupuestosCliente, type PresupuestoDB } from "./presupuestos-cliente";
 
 // Se llega aquí desde el menú o el widget de Reportes, SOLO si el
@@ -21,11 +20,13 @@ export default async function PresupuestosPage() {
   if (!empresa?.mostrar_presupuestos) redirect("/reportes");
 
   let presupuestos: PresupuestoDB[] = [];
-  let gastosMes: { categoria: string | null; monto: number }[] = [];
+  let egresos: { fecha: string; monto: number }[] = [];
 
   if (empresa) {
-    const mesActual = hoyISO().slice(0, 7);
-    const [pres, egresos] = await Promise.all([
+    // TODOS los egresos registrados (movimientos de gasto/pago +
+    // facturas de pago ya pagadas): cada uno descuenta del
+    // presupuesto, sin filtrar por categoría.
+    const [pres, movs, facts] = await Promise.all([
       supabase
         .from("presupuestos")
         .select("*")
@@ -33,14 +34,29 @@ export default async function PresupuestosPage() {
         .order("created_at", { ascending: false }),
       supabase
         .from("movimientos")
-        .select("categoria, monto")
+        .select("fecha, monto")
         .eq("id_empresa", empresa.id)
         .in("tipo", ["egreso", "pago"])
-        .gte("fecha", `${mesActual}-01`),
+        .limit(2000),
+      supabase
+        .from("facturas")
+        .select("fecha_emision, fecha_vencimiento, monto")
+        .eq("id_empresa", empresa.id)
+        .eq("tipo", "pagar")
+        .eq("estado", "pagado"),
     ]);
     presupuestos = (pres.data as PresupuestoDB[]) ?? [];
-    gastosMes = (egresos.data ?? []) as { categoria: string | null; monto: number }[];
+    egresos = [
+      ...(movs.data ?? []).map((m) => ({
+        fecha: m.fecha as string,
+        monto: Number(m.monto),
+      })),
+      ...(facts.data ?? []).map((f) => ({
+        fecha: (f.fecha_vencimiento ?? f.fecha_emision) as string,
+        monto: Number(f.monto),
+      })),
+    ];
   }
 
-  return <PresupuestosCliente presupuestos={presupuestos} gastosMes={gastosMes} />;
+  return <PresupuestosCliente presupuestos={presupuestos} egresos={egresos} />;
 }
