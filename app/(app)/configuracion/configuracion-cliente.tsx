@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/app/icon";
 import { aplicarColoresMarca } from "@/components/app/tema-marca";
+import { ImportarFacturas } from "./importar-facturas";
+import type { ConexionSheets } from "./importar-actions";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -38,6 +40,7 @@ export interface EmpresaConfig {
   colores_marca?: Partial<ColoresMarca>;
   notificaciones?: Partial<PreferenciasNotificaciones>;
   mostrar_presupuestos?: boolean;
+  hoja_calculo?: ConexionSheets | null;
 }
 
 type Seccion = "perfil" | "notificaciones" | "sesiones";
@@ -203,6 +206,9 @@ export function ConfiguracionCliente({
   const [mostrarPresupuestos, setMostrarPresupuestos] = useState(
     Boolean(empresa.mostrar_presupuestos)
   );
+
+  // ----- Importar facturas (archivo o Google Sheets) -----
+  const [importarAbierto, setImportarAbierto] = useState(false);
 
   // ----- Personas con acceso a los mensajes del bot -----
   const [personas, setPersonas] = useState<PersonaBot[]>(empresa.personas_bot ?? []);
@@ -579,6 +585,28 @@ export function ConfiguracionCliente({
                 </div>
               </Tarjeta>
 
+              {/* Importar facturas (archivo o Google Sheets) */}
+              <Tarjeta
+                titulo="Importar factura"
+                descripcion="Trae tus facturas desde Excel/CSV o conecta un Google Sheets en vivo."
+                accion={
+                  <button
+                    type="button"
+                    onClick={() => setImportarAbierto(true)}
+                    className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-on-primary transition-opacity hover:opacity-90"
+                  >
+                    <Icon name="upload_file" className="text-[16px]" />
+                    Importar factura
+                  </button>
+                }
+              >
+                <p className="text-xs font-light text-on-surface-variant">
+                  {empresa.hoja_calculo?.url
+                    ? "Tienes una hoja de Google Sheets conectada: se sincroniza sola al usar la app."
+                    : "Con anti-duplicación: si importas dos veces, no se repite nada."}
+                </p>
+              </Tarjeta>
+
               {/* Módulos: mostrar u ocultar Presupuestos */}
               <Tarjeta
                 titulo="Módulos"
@@ -946,6 +974,14 @@ export function ConfiguracionCliente({
             MapFlow te preguntará si fuiste tú.
           </p>
         </Tarjeta>
+      )}
+
+      {/* ===== Modal Importar facturas ===== */}
+      {importarAbierto && (
+        <ImportarFacturas
+          hoja={empresa.hoja_calculo ?? null}
+          onCerrar={() => setImportarAbierto(false)}
+        />
       )}
 
       {/* ===== Modal Anexar / editar persona ===== */}

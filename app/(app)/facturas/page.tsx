@@ -1,7 +1,12 @@
 import { createSupabaseServer } from "@/lib/supabase/server";
+import { sincronizarSheetsSiToca } from "@/app/(app)/configuracion/importar-actions";
 import { FacturasCliente, type FacturaConContacto } from "./facturas-cliente";
 
 export default async function FacturasPage() {
+  // Google Sheets conectado: trae lo nuevo (máx. 1 vez por hora,
+  // mejor esfuerzo — nunca bloquea la página si la hoja falla)
+  await sincronizarSheetsSiToca();
+
   const supabase = createSupabaseServer();
 
   // El middleware garantiza que hay sesión; aquí buscamos la empresa
