@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/components/app/icon";
 import { fmt, formatearFecha } from "@/lib/facturas";
@@ -39,6 +40,7 @@ export function MovimientosCliente({
   desdeInicial?: string; // el rango puede venir preaplicado por URL
   hastaInicial?: string;
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<TabDetalle>(tabInicial);
   const [filtroDeuda, setFiltroDeuda] = useState<FiltroDeuda>("todas");
   // Filtro de calendario: aplica a las tres subpestañas
@@ -70,13 +72,15 @@ export function MovimientosCliente({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <Link
-              href="/reportes"
-              aria-label="Volver a Reportes"
+            {/* Vuelve a donde estabas (Ventas o Reportes), no a una ruta fija */}
+            <button
+              type="button"
+              onClick={() => router.back()}
+              aria-label="Volver"
               className="rounded-full p-2 text-on-surface-variant hover:bg-surface-variant"
             >
               <Icon name="arrow_back" className="text-[22px]" />
-            </Link>
+            </button>
             <h1 className="text-4xl font-bold tracking-tight text-on-surface">
               Detalle financiero
             </h1>

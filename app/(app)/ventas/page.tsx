@@ -110,6 +110,9 @@ export default async function VentasPage({
       .gte("fecha_emision", desde)
       .lte("fecha_emision", hasta);
 
+    // SOLO INGRESOS: aunque las consultas ya filtran por tipo,
+    // este candado descarta cualquier monto no positivo que se
+    // hubiera colado (aquí se habla de ventas, jamás de egresos).
     ventas = [
       ...((movs.data ?? []).map((m) => ({
         id: `m-${m.id}`,
@@ -127,7 +130,9 @@ export default async function VentasPage({
           (f.estado === "pagado" ? "" : " · pendiente"),
         monto: Number(f.monto),
       })) as Venta[]),
-    ].sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+    ]
+      .filter((v) => v.monto > 0)
+      .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
   }
 
   // Resumen por día (cada día inicia a las 00:00)
@@ -153,8 +158,8 @@ export default async function VentasPage({
           </h1>
           <p className="mt-1 text-lg font-light text-on-surface-variant">
             {desde === hasta
-              ? `Cobros e ingresos del ${formatearFecha(desde)}.`
-              : `Cobros e ingresos del ${formatearFecha(desde)} al ${formatearFecha(hasta)}.`}
+              ? `Ingresos del ${formatearFecha(desde)}.`
+              : `Ingresos del ${formatearFecha(desde)} al ${formatearFecha(hasta)}.`}
           </p>
         </div>
         <Link

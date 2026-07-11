@@ -76,7 +76,9 @@ export function FacturasCliente({
     }
   }, [searchParams, router]);
 
-  const tipoForm: TipoFactura = modal ? modal.tipo : tipoNueva;
+  // Tipo efectivo del formulario (editable también al editar,
+  // para poder reclasificar un cobro que en realidad era un pago)
+  const tipoForm: TipoFactura = tipoNueva;
 
   const visibles = facturas.filter((f) => {
     const pasaTipo =
@@ -95,7 +97,8 @@ export function FacturasCliente({
     setErrorForm(null);
     setAvisoDuplicado(false);
     setRecurrente(Boolean(f?.es_recurrente));
-    if (!f) setTipoNueva("cobrar");
+    // Al editar, el selector permite RECLASIFICAR cobro ↔ pago
+    setTipoNueva(f?.tipo ?? "cobrar");
     setModal(f);
   }
 
@@ -511,8 +514,8 @@ export function FacturasCliente({
               </button>
             </div>
 
-            {/* Al crear: ¿cobro o pago? */}
-            {!modal && (
+            {/* ¿Cobro o pago? (al editar sirve para reclasificar) */}
+            {(
               <div className="mt-4 flex rounded-xl bg-surface-container-high p-1">
                 {(
                   [
