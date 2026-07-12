@@ -8,6 +8,7 @@ import {
   aplicarMapeo,
   autoMapear,
   parsearCSV,
+  type CampoExtra,
   type Mapeo,
 } from "@/lib/importacion";
 import { cn } from "@/lib/utils";
@@ -34,16 +35,20 @@ function MapeoColumnas({
   encabezados,
   mapeo,
   onCambio,
+  extras,
+  onExtras,
 }: {
   encabezados: string[];
   mapeo: Mapeo;
   onCambio: (m: Mapeo) => void;
+  extras: CampoExtra[];
+  onExtras: (e: CampoExtra[]) => void;
 }) {
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs font-light text-on-surface-variant">
         Empareja las columnas de TU archivo con los campos de MapFlow.
-        Los obvios ya vienen detectados.
+        Los obvios ya vienen detectados; lo que no mapees se ignora.
       </p>
       {CAMPOS_MAPFLOW.map((campo) => (
         <div key={campo.id} className="flex items-center gap-3">
@@ -68,6 +73,65 @@ function MapeoColumnas({
           </select>
         </div>
       ))}
+
+      {/* Campos extra del usuario: no existen en MapFlow pero sí en
+          su archivo; se guardan dentro del concepto de cada factura */}
+      {extras.map((extra, i) => (
+        <div key={`extra-${i}`} className="flex items-center gap-3">
+          <input
+            value={extra.etiqueta}
+            onChange={(e) =>
+              onExtras(
+                extras.map((x, j) =>
+                  j === i ? { ...x, etiqueta: e.target.value } : x
+                )
+              )
+            }
+            placeholder="Nombre del campo"
+            aria-label={`Nombre del campo extra ${i + 1}`}
+            className="w-44 shrink-0 rounded-lg border border-primary-container bg-surface-container-low p-2 text-xs font-light text-on-surface outline-none focus:ring-2 focus:ring-primary"
+          />
+          <select
+            value={extra.columna}
+            onChange={(e) =>
+              onExtras(
+                extras.map((x, j) =>
+                  j === i ? { ...x, columna: e.target.value } : x
+                )
+              )
+            }
+            aria-label={`Columna para el campo extra ${i + 1}`}
+            className="w-full rounded-lg border border-primary-container bg-surface-container-low p-2 text-sm font-light text-on-surface outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="">— Elige la columna —</option>
+            {encabezados.map((e) => (
+              <option key={e} value={e}>
+                {e}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => onExtras(extras.filter((_, j) => j !== i))}
+            aria-label={`Quitar campo extra ${i + 1}`}
+            className="rounded-full p-1.5 text-on-surface-variant hover:bg-surface-variant hover:text-error"
+          >
+            <Icon name="close" className="text-[16px]" />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onExtras([...extras, { etiqueta: "", columna: "" }])}
+        className="flex w-fit items-center gap-1.5 rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-on-surface-variant transition-colors hover:bg-surface-container"
+      >
+        <Icon name="add" className="text-[14px]" />
+        Anexar campo
+      </button>
+      <p className="text-[11px] font-light text-on-surface-variant">
+        ¿Tu archivo trae algo que MapFlow no tiene (bodega, vendedor…)?
+        Anéxalo y quedará guardado dentro del concepto de cada factura.
+      </p>
     </div>
   );
 }
@@ -90,6 +154,7 @@ export function ImportarFacturas({
   const [encabezados, setEncabezados] = useState<string[]>([]);
   const [filas, setFilas] = useState<string[][]>([]);
   const [mapeo, setMapeo] = useState<Mapeo>({});
+  const [extras, setExtras] = useState<CampoExtra[]>([]);
   const [previa, setPrevia] = useState<{
     validas: number;
     duplicadas: number;
@@ -100,6 +165,7 @@ export function ImportarFacturas({
   const [urlSheets, setUrlSheets] = useState("");
   const [encabezadosSheets, setEncabezadosSheets] = useState<string[]>([]);
   const [mapeoSheets, setMapeoSheets] = useState<Mapeo>({});
+  const [extrasSheets, setExtrasSheets] = useState<CampoExtra[]>([]);
 
   function cargarMatriz(nombre: string, matriz: string[][]) {
     if (matriz.length < 2) {
@@ -111,6 +177,7 @@ export function ImportarFacturas({
     setEncabezados(enc);
     setFilas(matriz.slice(1));
     setMapeo(autoMapear(enc));
+    setExtras([]);
     setPrevia(null);
     setError(null);
     setExito(null);
@@ -149,7 +216,7 @@ export function ImportarFacturas({
   function verPrevia() {
     setError(null);
     startTransition(async () => {
-      const crudas = aplicarMapeo(encabezados, filas, mapeo);
+      const crudas = aplicarMapeo(encabezados, filas, mapeo, extras);
       const res = await previsualizarImportacion(crudas);
       if (!res.ok) return setError(res.error ?? "No se pudo previsualizar.");
       setPrevia({
@@ -163,7 +230,7 @@ export function ImportarFacturas({
   function confirmarImportacion() {
     setError(null);
     startTransition(async () => {
-      const crudas = aplicarMapeo(encabezados, filas, mapeo);
+      const crudas = aplicarMapeo(encabezados, filas, mapeo, extras);
       const res = await importarFacturas(crudas);
       if (!res.ok) return setError(res.error ?? "No se pudo importar.");
       setExito(
@@ -191,7 +258,11 @@ export function ImportarFacturas({
   function conectarSheets() {
     setError(null);
     startTransition(async () => {
-      const res = await guardarConexionSheets({ url: urlSheets, mapeo: mapeoSheets });
+      const res = await guardarConexionSheets({
+        url: urlSheets,
+        mapeo: mapeoSheets,
+        extras: extrasSheets,
+      });
       if (!res.ok) return setError(res.error ?? "No se pudo conectar.");
       // Primera sincronización inmediata
       const sync = await sincronizarSheets();
@@ -316,6 +387,11 @@ export function ImportarFacturas({
                   mapeo={mapeo}
                   onCambio={(m) => {
                     setMapeo(m);
+                    setPrevia(null);
+                  }}
+                  extras={extras}
+                  onExtras={(e) => {
+                    setExtras(e);
                     setPrevia(null);
                   }}
                 />
@@ -467,6 +543,8 @@ export function ImportarFacturas({
                       encabezados={encabezadosSheets}
                       mapeo={mapeoSheets}
                       onCambio={setMapeoSheets}
+                      extras={extrasSheets}
+                      onExtras={setExtrasSheets}
                     />
                     <div className="flex justify-end">
                       <button

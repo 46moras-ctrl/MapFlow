@@ -171,6 +171,8 @@ export async function guardarPlanPago(datos: DatosPlanPago): Promise<Resultado> 
 
   revalidatePath("/pendientes");
   revalidatePath("/facturas");
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
   return { ok: true };
 }
 
@@ -212,6 +214,8 @@ export async function completarPlan(
 
   revalidatePath("/pendientes");
   revalidatePath("/facturas");
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
   return { ok: true };
 }
 
@@ -321,6 +325,8 @@ export async function completarPlanConCredito(
 
   revalidatePath("/pendientes");
   revalidatePath("/facturas");
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
   return { ok: true };
 }
 
@@ -352,5 +358,7 @@ export async function eliminarPlan(id: string): Promise<Resultado> {
 
   revalidatePath("/pendientes");
   revalidatePath("/facturas");
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
   return { ok: true };
 }

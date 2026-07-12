@@ -151,6 +151,8 @@ export async function crearFactura(datos: DatosFactura): Promise<Resultado> {
   }
 
   revalidatePath("/facturas");
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
   return { ok: true };
 }
 
@@ -195,6 +197,8 @@ export async function actualizarFactura(
 
   revalidatePath("/facturas");
   revalidatePath(`/facturas/${id}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
   return { ok: true };
 }
 
@@ -262,6 +266,8 @@ export async function pagarFactura(
 
   revalidatePath("/facturas");
   revalidatePath(`/facturas/${id}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
   return { ok: true };
 }
 
@@ -343,6 +349,8 @@ export async function pagarConCredito(
 
   revalidatePath("/facturas");
   revalidatePath(`/facturas/${id}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
   return { ok: true };
 }
 
@@ -367,6 +375,8 @@ export async function cambiarEstado(
 
   revalidatePath("/facturas");
   revalidatePath(`/facturas/${id}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
   return { ok: true };
 }
 
@@ -423,6 +433,8 @@ export async function guardarAjustesRecordatorios(
   }
 
   revalidatePath("/facturas");
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
   return { ok: true };
 }
 
@@ -439,5 +451,7 @@ export async function eliminarFactura(id: string): Promise<Resultado> {
   if (error) return { ok: false, error: "No se pudo eliminar la factura." };
 
   revalidatePath("/facturas");
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
   return { ok: true };
 }

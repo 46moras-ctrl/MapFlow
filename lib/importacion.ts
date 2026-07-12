@@ -8,6 +8,7 @@
 export const CAMPOS_MAPFLOW = [
   { id: "contacto", label: "Contacto (cliente/proveedor)", requerido: true },
   { id: "monto", label: "Monto", requerido: true },
+  { id: "numero_factura", label: "Nº de factura", requerido: false },
   { id: "fecha_emision", label: "Fecha de emisión", requerido: false },
   { id: "fecha_vencimiento", label: "Fecha de vencimiento", requerido: false },
   { id: "concepto", label: "Concepto", requerido: false },
@@ -16,16 +17,26 @@ export const CAMPOS_MAPFLOW = [
   { id: "medio_pago", label: "Medio de pago", requerido: false },
 ] as const;
 
+// Campos extra del usuario ("Anexar campo"): columnas de SU archivo
+// que no existen en MapFlow y se guardan dentro del concepto.
+export interface CampoExtra {
+  etiqueta: string;
+  columna: string;
+}
+
 export type CampoMapFlow = (typeof CAMPOS_MAPFLOW)[number]["id"];
 
 // columna del archivo elegida para cada campo ("" = sin mapear)
 export type Mapeo = Partial<Record<CampoMapFlow, string>>;
 
 // Una fila del archivo ya traducida a campos de MapFlow (crudos)
-export type FilaCruda = Partial<Record<CampoMapFlow, string>>;
+export type FilaCruda = Partial<Record<CampoMapFlow, string>> & {
+  extras?: Record<string, string>;
+};
 
 // Fila lista para insertar en la tabla facturas
 export interface FilaNormalizada {
+  numero_factura: string | null;
   cliente: string;
   monto: number;
   fecha_emision: string;
@@ -41,6 +52,7 @@ export function autoMapear(encabezados: string[]): Mapeo {
   const patrones: [CampoMapFlow, RegExp][] = [
     ["fecha_vencimiento", /venc/i],
     ["fecha_emision", /emisi|emitid|^fecha$|creaci/i],
+    ["numero_factura", /n[°ºo]?\s*\.?\s*factura|n[uú]mero|referencia/i],
     ["contacto", /cliente|contacto|proveedor|nombre|tercero/i],
     ["monto", /monto|valor|total|importe|precio/i],
     ["concepto", /concepto|descrip|detalle|observaci/i],
@@ -79,17 +91,36 @@ export function parsearMonto(crudo: string | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
 }
 
-/** 'DD/MM/YYYY', 'YYYY-MM-DD', 'DD-MM-YYYY' → 'YYYY-MM-DD' (o null) */
+/** ¿Es una fecha REAL del calendario? (rechaza mes 13, día 45, etc.) */
+function fechaValida(y: number, m: number, d: number): boolean {
+  if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const fecha = new Date(Date.UTC(y, m - 1, d));
+  return (
+    fecha.getUTCFullYear() === y &&
+    fecha.getUTCMonth() === m - 1 &&
+    fecha.getUTCDate() === d
+  );
+}
+
+/**
+ * 'DD/MM/YYYY', 'YYYY-MM-DD', 'DD-MM-YYYY' → 'YYYY-MM-DD' (o null).
+ * Una fecha imposible (ej. "2027-13-45") devuelve null: la
+ * importación es tolerante y usará la fecha de respaldo en su lugar.
+ */
 export function parsearFecha(cruda: string | undefined): string | null {
   if (!cruda) return null;
   const s = String(cruda).trim().slice(0, 10);
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
   if (m) {
+    const [y, mes, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    if (!fechaValida(y, mes, d)) return null;
     return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
   }
   m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/.exec(s);
   if (m) {
     // Se asume día/mes/año (formato hispano)
+    const [d, mes, y] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    if (!fechaValida(y, mes, d)) return null;
     return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
   }
   return null;
@@ -130,7 +161,8 @@ export function parsearCSV(texto: string): string[][] {
 export function aplicarMapeo(
   encabezados: string[],
   filas: string[][],
-  mapeo: Mapeo
+  mapeo: Mapeo,
+  extras: CampoExtra[] = []
 ): FilaCruda[] {
   const indice: Partial<Record<CampoMapFlow, number>> = {};
   for (const campo of Object.keys(mapeo) as CampoMapFlow[]) {
@@ -139,10 +171,21 @@ export function aplicarMapeo(
     const i = encabezados.indexOf(col);
     if (i >= 0) indice[campo] = i;
   }
+  const indicesExtra = extras
+    .map((e) => ({ etiqueta: e.etiqueta.trim(), i: encabezados.indexOf(e.columna) }))
+    .filter((e) => e.etiqueta && e.i >= 0);
+
   return filas.map((f) => {
     const cruda: FilaCruda = {};
     for (const campo of Object.keys(indice) as CampoMapFlow[]) {
       cruda[campo] = String(f[indice[campo]!] ?? "").trim();
+    }
+    if (indicesExtra.length > 0) {
+      cruda.extras = {};
+      for (const e of indicesExtra) {
+        const valor = String(f[e.i] ?? "").trim();
+        if (valor) cruda.extras[e.etiqueta] = valor;
+      }
     }
     return cruda;
   });
@@ -188,12 +231,21 @@ export function normalizarFila(
           ? "credito"
           : null;
 
+  // Los campos anexados por el usuario viajan dentro del concepto,
+  // visibles en el detalle de la factura: "Bodega: A1 · Vendedor: Juan"
+  const extras = Object.entries(cruda.extras ?? {})
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(" · ");
+  const concepto =
+    [cruda.concepto?.trim(), extras].filter(Boolean).join(" · ") || null;
+
   return {
+    numero_factura: cruda.numero_factura?.trim() || null,
     cliente,
     monto,
     fecha_emision: emision,
     fecha_vencimiento: vencimiento,
-    concepto: cruda.concepto?.trim() || null,
+    concepto,
     tipo,
     estado,
     medio_pago: medio,

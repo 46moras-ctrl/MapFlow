@@ -5,6 +5,8 @@ import { fmt, hoyISO } from "@/lib/facturas";
 import { construirFlujo, ultimosMeses, type FilaDinero } from "@/lib/finanzas";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 // ============================================================
 // DASHBOARD — bienvenida simple con resumen (datos reales):
 //   1. Saludo con el nombre.

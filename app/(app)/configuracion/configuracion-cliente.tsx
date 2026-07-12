@@ -6,6 +6,7 @@ import { Icon } from "@/components/app/icon";
 import { aplicarColoresMarca } from "@/components/app/tema-marca";
 import { ImportarFacturas } from "./importar-facturas";
 import type { ConexionSheets } from "./importar-actions";
+import { confirmarBorrado, solicitarCodigoBorrado } from "./borrar-actions";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -210,6 +211,19 @@ export function ConfiguracionCliente({
   // ----- Importar facturas (archivo o Google Sheets) -----
   const [importarAbierto, setImportarAbierto] = useState(false);
 
+  // ----- Borrar datos de la cuenta (código por correo) -----
+  const [borrarAbierto, setBorrarAbierto] = useState(false);
+  const [borrarPaso, setBorrarPaso] = useState<"resumen" | "codigo" | "listo">("resumen");
+  const [borrarConteos, setBorrarConteos] = useState<{
+    facturas: number;
+    pendientes: number;
+    presupuestos: number;
+    movimientos: number;
+    mensajes: number;
+  } | null>(null);
+  const [borrarCorreo, setBorrarCorreo] = useState<string | null>(null);
+  const [borrarError, setBorrarError] = useState<string | null>(null);
+
   // ----- Personas con acceso a los mensajes del bot -----
   const [personas, setPersonas] = useState<PersonaBot[]>(empresa.personas_bot ?? []);
   // índice de la persona en edición (null = anexar nueva; undefined = cerrado)
@@ -409,6 +423,41 @@ export function ConfiguracionCliente({
       const res = await reportarSesion(s.id);
       if (!res.ok) return fallo(res.error ?? "No se pudo reportar.");
       exito("Sesión reportada. Te recomendamos cambiar tu contraseña.");
+      router.refresh();
+    });
+  }
+
+  function abrirBorrado() {
+    setBorrarError(null);
+    setBorrarConteos(null);
+    setBorrarPaso("resumen");
+    setBorrarAbierto(true);
+    startTransition(async () => {
+      const res = await solicitarCodigoBorrado();
+      if (!res.ok || !res.conteos) {
+        setBorrarError(res.error ?? "No se pudo preparar el borrado.");
+        return;
+      }
+      setBorrarConteos(res.conteos);
+      setBorrarCorreo(res.correo ?? null);
+      setBorrarPaso("codigo");
+    });
+  }
+
+  function ejecutarBorrado(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    setBorrarError(null);
+    startTransition(async () => {
+      const res = await confirmarBorrado(
+        String(fd.get("codigo") ?? ""),
+        String(fd.get("palabra") ?? "")
+      );
+      if (!res.ok) {
+        setBorrarError(res.error ?? "No se pudo borrar.");
+        return;
+      }
+      setBorrarPaso("listo");
       router.refresh();
     });
   }
@@ -974,6 +1023,161 @@ export function ConfiguracionCliente({
             MapFlow te preguntará si fuiste tú.
           </p>
         </Tarjeta>
+      )}
+
+      {/* ===== ZONA DE PELIGRO: borrar datos de la cuenta ===== */}
+      <div className="mt-4 rounded-xl border border-error/40 bg-error-container/20 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h3 className="flex items-center gap-2 text-lg font-bold text-error">
+              <Icon name="delete_forever" className="text-[22px]" />
+              Borrar datos de la cuenta
+            </h3>
+            <p className="mt-1 max-w-xl text-sm font-light text-on-surface-variant">
+              Elimina todas las facturas (cobros y pagos), pendientes,
+              presupuestos, ingresos/egresos y el historial del bot de TU
+              empresa, dejando la cuenta limpia. Requiere un código que se
+              envía a tu correo. Esta acción no se puede deshacer.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={abrirBorrado}
+            className="rounded-xl bg-error px-6 py-3 text-xs font-bold uppercase tracking-wider text-on-error transition-opacity hover:opacity-90"
+          >
+            Borrar datos de la cuenta
+          </button>
+        </div>
+      </div>
+
+      {/* ===== Modal de confirmación del borrado ===== */}
+      {borrarAbierto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirmar borrado de datos"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-surface-container-lowest p-6 shadow-level-2">
+            <div className="flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-xl font-bold text-error">
+                <Icon name="warning" filled className="text-[22px]" />
+                Borrar datos de la cuenta
+              </h2>
+              <button
+                type="button"
+                onClick={() => setBorrarAbierto(false)}
+                aria-label="Cerrar"
+                className="rounded-full p-2 text-on-surface-variant hover:bg-surface-variant"
+              >
+                <Icon name="close" className="text-[20px]" />
+              </button>
+            </div>
+
+            {borrarPaso === "resumen" && !borrarError && (
+              <div className="mt-6 flex items-center justify-center gap-2 py-6 text-sm font-light text-on-surface-variant">
+                <Icon name="progress_activity" className="animate-spin text-[18px]" />
+                Preparando el resumen y enviando el código a tu correo…
+              </div>
+            )}
+
+            {borrarPaso === "codigo" && borrarConteos && (
+              <form onSubmit={ejecutarBorrado} className="mt-4 flex flex-col gap-4">
+                <div className="rounded-lg border border-error/30 bg-error-container/30 px-4 py-3 text-sm font-light leading-relaxed text-on-surface">
+                  <strong className="font-semibold">Se eliminará para siempre:</strong>
+                  <ul className="mt-1">
+                    <li>· {borrarConteos.facturas} facturas (cobros y pagos)</li>
+                    <li>· {borrarConteos.pendientes} pendientes</li>
+                    <li>· {borrarConteos.presupuestos} presupuestos</li>
+                    <li>· {borrarConteos.movimientos} ingresos/egresos</li>
+                    <li>· {borrarConteos.mensajes} mensajes del bot</li>
+                  </ul>
+                  Los contactos y la configuración se conservan.
+                </div>
+                <p className="text-sm font-light text-on-surface-variant">
+                  Te enviamos un código de 6 dígitos a{" "}
+                  <strong className="font-semibold">{borrarCorreo}</strong>
+                  {" "}(vence en 10 minutos).
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={claseEtiqueta}>Código del correo *</label>
+                    <input
+                      name="codigo"
+                      required
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="000000"
+                      className={cn(claseCampo, "text-center text-lg tracking-[6px]")}
+                    />
+                  </div>
+                  <div>
+                    <label className={claseEtiqueta}>Escribe BORRAR *</label>
+                    <input
+                      name="palabra"
+                      required
+                      placeholder="BORRAR"
+                      className={cn(claseCampo, "text-center uppercase")}
+                    />
+                  </div>
+                </div>
+                {borrarError && (
+                  <div className="flex items-start gap-2 rounded-lg bg-error-container px-4 py-3 text-sm font-light text-on-error-container">
+                    <Icon name="error" className="mt-0.5 shrink-0 text-[18px]" />
+                    {borrarError}
+                  </div>
+                )}
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setBorrarAbierto(false)}
+                    className="rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-wider text-on-surface-variant transition-colors hover:bg-surface-variant"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={ocupado}
+                    className="flex items-center gap-2 rounded-xl bg-error px-6 py-3 text-xs font-bold uppercase tracking-wider text-on-error transition-opacity hover:opacity-90 disabled:opacity-60"
+                  >
+                    {ocupado ? (
+                      <>
+                        <Icon name="progress_activity" className="animate-spin text-[16px]" />
+                        Borrando…
+                      </>
+                    ) : (
+                      "Eliminar todo definitivamente"
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {borrarPaso === "resumen" && borrarError && (
+              <div className="mt-4 flex items-start gap-2 rounded-lg bg-error-container px-4 py-3 text-sm font-light text-on-error-container">
+                <Icon name="error" className="mt-0.5 shrink-0 text-[18px]" />
+                {borrarError}
+              </div>
+            )}
+
+            {borrarPaso === "listo" && (
+              <div className="mt-6 flex flex-col items-center gap-3 py-4 text-center">
+                <Icon name="check_circle" filled className="text-[40px] text-secondary" />
+                <p className="text-sm font-light text-on-surface">
+                  Listo: tu cuenta quedó limpia. Puedes empezar a registrar o
+                  importar tu información desde cero.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setBorrarAbierto(false)}
+                  className="rounded-xl bg-primary px-6 py-3 text-xs font-bold uppercase tracking-wider text-on-primary hover:opacity-90"
+                >
+                  Entendido
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ===== Modal Importar facturas ===== */}

@@ -4,6 +4,8 @@ import { fmt, formatearFecha, hoyISO } from "@/lib/facturas";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 // ============================================================
 // VENTAS — resumen de TODOS los ingresos y cobros del periodo,
 // pagados o pendientes, agrupados por día (cada día inicia a

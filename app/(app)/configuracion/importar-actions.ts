@@ -6,6 +6,7 @@ import {
   claveDuplicado,
   normalizarFila,
   parsearCSV,
+  type CampoExtra,
   type FilaCruda,
   type Mapeo,
 } from "@/lib/importacion";
@@ -47,7 +48,20 @@ async function clavesExistentes(
   );
 }
 
-/** Núcleo compartido por archivo y Sheets: normaliza, filtra duplicados e inserta */
+/** Traduce el error técnico de la base a un mensaje entendible */
+function motivoLegible(codigo: string | undefined, mensaje: string): string {
+  if (codigo === "23505") return "número de factura repetido";
+  if (codigo === "22008" || codigo === "22007") return "fecha inválida";
+  if (codigo === "23514") return "un dato no cumple las reglas de la base";
+  return mensaje;
+}
+
+/**
+ * Núcleo compartido por archivo y Sheets: normaliza, filtra
+ * duplicados e inserta con TOLERANCIA — las filas buenas entran
+ * siempre; una fila mala solo se omite a sí misma, jamás tumba
+ * el resto del archivo.
+ */
 async function importarFilasCrudas(
   supabase: SupabaseClient,
   empresaId: string,
@@ -57,6 +71,7 @@ async function importarFilasCrudas(
   const existentes = await clavesExistentes(supabase, empresaId);
   const vistas = new Set<string>(); // duplicados dentro del propio archivo
 
+  const base = Date.now();
   const listas = [];
   let omitidas = 0;
   for (const cruda of crudas) {
@@ -71,29 +86,48 @@ async function importarFilasCrudas(
       continue;
     }
     vistas.add(clave);
-    listas.push(fila);
+    listas.push({
+      id_empresa: empresaId,
+      ...fila,
+      // Se respeta el número del archivo; sin número, se genera uno
+      numero_factura: fila.numero_factura || `IMP-${base}-${listas.length + 1}`,
+    });
   }
 
   if (listas.length === 0) return { importadas: 0, omitidas };
 
-  const base = Date.now();
-  const { error } = await supabase.from("facturas").insert(
-    listas.map((f, i) => ({
-      id_empresa: empresaId,
-      numero_factura: `IMP-${base}-${i + 1}`,
-      ...f,
-    }))
-  );
-  if (error)
+  // Inserción por bloques; si un bloque falla, se reintenta fila
+  // por fila para rescatar las buenas y omitir solo las malas.
+  let importadas = 0;
+  let primerMotivo: string | null = null;
+  for (let i = 0; i < listas.length; i += 50) {
+    const bloque = listas.slice(i, i + 50);
+    const { error } = await supabase.from("facturas").insert(bloque);
+    if (!error) {
+      importadas += bloque.length;
+      continue;
+    }
+    for (const fila of bloque) {
+      const { error: errorFila } = await supabase.from("facturas").insert(fila);
+      if (errorFila) {
+        omitidas++;
+        primerMotivo ??= motivoLegible(errorFila.code, errorFila.message);
+      } else importadas++;
+    }
+  }
+
+  if (importadas === 0)
     return {
       importadas: 0,
       omitidas,
-      error: "No se pudieron guardar las facturas. Intenta de nuevo.",
+      error: `No se pudo guardar ninguna factura${primerMotivo ? ` (motivo: ${primerMotivo})` : ""}.`,
     };
 
   revalidatePath("/facturas");
   revalidatePath("/pendientes");
-  return { importadas: listas.length, omitidas };
+  revalidatePath("/dashboard");
+  revalidatePath("/ventas");
+  return { importadas, omitidas };
 }
 
 // ===== 6A · ARCHIVO EXCEL/CSV =====
@@ -149,6 +183,7 @@ export async function importarFacturas(
 export interface ConexionSheets {
   url: string;
   mapeo: Mapeo;
+  extras?: CampoExtra[];
   ultima_sync: string | null;
 }
 
@@ -194,6 +229,7 @@ export async function leerEncabezadosSheets(
 export async function guardarConexionSheets(datos: {
   url: string;
   mapeo: Mapeo;
+  extras?: CampoExtra[];
 }): Promise<ResultadoImportacion> {
   if (!urlCSV(datos.url))
     return { ok: false, error: "Ese enlace no parece de Google Sheets." };
@@ -204,7 +240,12 @@ export async function guardarConexionSheets(datos: {
   const { error } = await ctx.supabase
     .from("empresas")
     .update({
-      hoja_calculo: { url: datos.url, mapeo: datos.mapeo, ultima_sync: null },
+      hoja_calculo: {
+        url: datos.url,
+        mapeo: datos.mapeo,
+        extras: datos.extras ?? [],
+        ultima_sync: null,
+      },
     })
     .eq("id", ctx.empresaId);
   if (error) {
@@ -248,7 +289,12 @@ export async function sincronizarSheets(): Promise<ResultadoImportacion> {
     };
 
   const encabezados = matriz[0].map((e) => e.trim());
-  const crudas = aplicarMapeo(encabezados, matriz.slice(1), conexion.mapeo);
+  const crudas = aplicarMapeo(
+    encabezados,
+    matriz.slice(1),
+    conexion.mapeo,
+    conexion.extras ?? []
+  );
   const res = await importarFilasCrudas(ctx.supabase, ctx.empresaId, crudas);
   if (res.error) return { ok: false, error: res.error };
 
