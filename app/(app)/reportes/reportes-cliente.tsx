@@ -38,7 +38,7 @@ function SaludPresupuesto({
   gastosActuales: number;
   costoNomina: number;
 }) {
-  const disponible = presupuestoTotalMes - gastosActuales;
+  const disponible = presupuestoTotalMes > 0 ? presupuestoTotalMes - gastosActuales : 0;
   const pctConsumido =
     presupuestoTotalMes > 0 ? (gastosActuales / presupuestoTotalMes) * 100 : 0;
   const alcanzaNomina = disponible >= costoNomina;
@@ -50,10 +50,20 @@ function SaludPresupuesto({
     texto: "text-on-secondary-container",
     icono: "check_circle",
     titulo: "Presupuesto sano",
-    mensaje: "Fondos suficientes para la nómina y operaciones.",
+    mensaje: "Fondos suficientes para la operación.",
     barra: "bg-secondary",
   };
-  if (!alcanzaNomina) {
+
+  if (presupuestoTotalMes === 0) {
+    estado = {
+      caja: "border-outline-variant bg-surface-container-low",
+      texto: "text-on-surface-variant",
+      icono: "info",
+      titulo: "Sin presupuesto definido",
+      mensaje: "Aún no has definido topes de gasto. Establece un presupuesto para ver tu salud financiera.",
+      barra: "bg-outline-variant",
+    };
+  } else if (costoNomina > 0 && !alcanzaNomina) {
     estado = {
       caja: "border-error/40 bg-error-container/70",
       texto: "text-on-error-container",
@@ -62,16 +72,31 @@ function SaludPresupuesto({
       mensaje: `Faltan ${fmt(faltanteNomina)} para cubrir la nómina del mes.`,
       barra: "bg-error",
     };
+  } else if (disponible < 0) {
+    estado = {
+      caja: "border-error/40 bg-error-container/70",
+      texto: "text-on-error-container",
+      icono: "warning",
+      titulo: "Presupuesto excedido",
+      mensaje: `Has superado tu presupuesto mensual por ${fmt(Math.abs(disponible))}.`,
+      barra: "bg-error",
+    };
   } else if (alertaLimite) {
     estado = {
       caja: "border-tertiary-container bg-tertiary-container/60",
       texto: "text-on-tertiary-container",
       icono: "info",
       titulo: "Presupuesto al límite",
-      mensaje:
-        "Has consumido más del 85%. Frena gastos no esenciales (nómina a salvo).",
+      mensaje: "Has consumido más del 85%. Frena gastos no esenciales.",
       barra: "bg-tertiary",
     };
+  }
+
+  // Adjust default message if they have a payroll budget and it's safe
+  if (presupuestoTotalMes > 0 && disponible >= 0 && costoNomina > 0 && !alertaLimite) {
+    estado.mensaje = "Fondos suficientes para la nómina y operaciones.";
+  } else if (presupuestoTotalMes > 0 && alertaLimite && costoNomina > 0 && alcanzaNomina) {
+    estado.mensaje = "Has consumido más del 85%. Frena gastos no esenciales (nómina a salvo).";
   }
 
   return (
@@ -129,7 +154,7 @@ function SaludPresupuesto({
       </div>
 
       {/* Acción sugerida si la nómina está en riesgo */}
-      {!alcanzaNomina && (
+      {costoNomina > 0 && !alcanzaNomina && (
         <Link
           href="/pendientes?tab=cobro"
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-error px-4 py-3 text-xs font-bold uppercase tracking-wider text-on-error transition-opacity hover:opacity-90"

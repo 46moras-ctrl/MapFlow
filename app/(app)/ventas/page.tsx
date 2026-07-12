@@ -87,6 +87,7 @@ export default async function VentasPage({
     contraparte: string;
     detalle: string;
     monto: number;
+    pendiente: boolean; // aún no se ha cobrado
   }
   let ventas: Venta[] = [];
 
@@ -122,15 +123,15 @@ export default async function VentasPage({
         contraparte: (m.contraparte as string) || "—",
         detalle: (m.descripcion as string) || (m.categoria as string) || "Ingreso",
         monto: Number(m.monto),
+        pendiente: false, // un movimiento de ingreso ya entró
       })) as Venta[]),
       ...((facts.data ?? []).map((f) => ({
         id: `f-${f.id}`,
         fecha: f.fecha_emision as string,
         contraparte: f.cliente as string,
-        detalle:
-          ((f.concepto as string) || "Factura de cobro") +
-          (f.estado === "pagado" ? "" : " · pendiente"),
+        detalle: (f.concepto as string) || "Factura de cobro",
         monto: Number(f.monto),
+        pendiente: f.estado !== "pagado",
       })) as Venta[]),
     ]
       .filter((v) => v.monto > 0)
@@ -221,24 +222,19 @@ export default async function VentasPage({
         </form>
       </div>
 
-      {/* Totales del periodo */}
+      {/* Totales del periodo (la lista completa está aquí abajo) */}
       <div className="grid gap-6 sm:grid-cols-2">
-        {/* Clic → Detalle financiero (Ingresos) con ESTE mismo rango */}
-        <Link
-          href={`/movimientos?tab=ingresos&desde=${desde}&hasta=${hasta}`}
-          className="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-level-1 transition-colors hover:border-primary"
-        >
-          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+        <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-level-1">
+          <div className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
             Ventas realizadas
-            <Icon name="arrow_forward" className="text-[16px] text-primary" />
           </div>
           <div className="mt-2 text-4xl font-bold tabular-nums text-on-surface">
             {totalVentas}
           </div>
-          <div className="mt-1 text-xs font-bold uppercase tracking-wider text-primary">
-            Ver detalle de ingresos
+          <div className="mt-1 text-xs font-light text-on-surface-variant">
+            pagadas y pendientes del periodo
           </div>
-        </Link>
+        </div>
         <div className="rounded-xl border border-secondary-container bg-secondary-container/30 p-6 shadow-level-1">
           <div className="text-xs font-bold uppercase tracking-wider text-on-secondary-container">
             Monto total
@@ -281,6 +277,53 @@ export default async function VentasPage({
                   </td>
                   <td className="px-6 py-3.5 text-right font-semibold tabular-nums text-secondary">
                     {fmt(d.total)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+
+          {/* Lista completa: TODOS los ingresos del periodo, uno a
+              uno, pagados o pendientes, según los filtros de arriba */}
+          <h3 className="border-t border-outline-variant px-6 py-4 text-xl font-bold text-on-surface">
+            Todas las ventas del periodo
+          </h3>
+          <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left">
+            <thead className="border-b border-outline-variant bg-surface-container-low">
+              <tr className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                <th className="px-6 py-3">Fecha</th>
+                <th className="px-6 py-3">Cliente</th>
+                <th className="px-6 py-3">Detalle</th>
+                <th className="px-6 py-3">Estado</th>
+                <th className="px-6 py-3 text-right">Monto</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-outline-variant">
+              {ventas.map((v) => (
+                <tr key={v.id} className="text-sm transition-colors hover:bg-surface-container">
+                  <td className="px-6 py-3.5 font-light text-on-surface-variant">
+                    {formatearFecha(v.fecha)}
+                  </td>
+                  <td className="px-6 py-3.5 font-semibold text-on-surface">
+                    {v.contraparte}
+                  </td>
+                  <td className="px-6 py-3.5 font-light text-on-surface-variant">
+                    {v.detalle}
+                  </td>
+                  <td className="px-6 py-3.5">
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider",
+                        v.pendiente
+                          ? "bg-tertiary-container text-on-tertiary-container"
+                          : "bg-secondary-container text-on-secondary-container"
+                      )}
+                    >
+                      {v.pendiente ? "Pendiente" : "Pagada"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3.5 text-right font-semibold tabular-nums text-on-surface">
+                    {fmt(v.monto)}
                   </td>
                 </tr>
               ))}

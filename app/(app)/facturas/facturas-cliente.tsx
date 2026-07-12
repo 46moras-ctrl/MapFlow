@@ -50,6 +50,8 @@ export function FacturasCliente({
   const searchParams = useSearchParams();
 
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>("todas");
+  // Saldadas = ya pagadas · Pendientes = aún sin pagar (rosadas)
+  const [filtroEstado, setFiltroEstado] = useState<"todas" | "saldadas" | "pendientes">("todas");
   const [busqueda, setBusqueda] = useState("");
   // modal === undefined: cerrado · null: crear · FacturaDB: editar
   const [modal, setModal] = useState<FacturaDB | null | undefined>(undefined);
@@ -85,13 +87,20 @@ export function FacturasCliente({
       filtroTipo === "todas" ||
       (filtroTipo === "cobros" && (f.tipo ?? "cobrar") === "cobrar") ||
       (filtroTipo === "pagos" && f.tipo === "pagar");
+    const pasaEstado =
+      filtroEstado === "todas" ||
+      (filtroEstado === "saldadas" && f.estado === "pagado") ||
+      (filtroEstado === "pendientes" && f.estado !== "pagado");
     const q = busqueda.trim().toLowerCase();
     const pasaBusqueda =
       !q ||
       f.cliente.toLowerCase().includes(q) ||
       f.numero_factura.toLowerCase().includes(q);
-    return pasaTipo && pasaBusqueda;
+    return pasaTipo && pasaEstado && pasaBusqueda;
   });
+
+  // Cuánto dinero suma lo que se está viendo con los filtros puestos
+  const sumaVisible = visibles.reduce((s, f) => s + Number(f.monto), 0);
 
   function abrirModal(f: FacturaDB | null) {
     setErrorForm(null);
@@ -223,6 +232,27 @@ export function FacturasCliente({
             className={
               filtroTipo === f.id
                 ? "rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary"
+                : "rounded-lg bg-surface-container-high px-4 py-1.5 text-xs font-light text-on-surface-variant transition-colors hover:bg-surface-container-highest"
+            }
+          >
+            {f.label}
+          </button>
+        ))}
+        <span className="h-5 w-px bg-outline-variant" />
+        {(
+          [
+            { id: "todas", label: "Todas" },
+            { id: "saldadas", label: "Saldadas" },
+            { id: "pendientes", label: "Pendientes" },
+          ] as const
+        ).map((f) => (
+          <button
+            key={`e-${f.id}`}
+            type="button"
+            onClick={() => setFiltroEstado(f.id)}
+            className={
+              filtroEstado === f.id
+                ? "rounded-lg bg-tertiary px-4 py-1.5 text-xs font-bold text-on-tertiary"
                 : "rounded-lg bg-surface-container-high px-4 py-1.5 text-xs font-light text-on-surface-variant transition-colors hover:bg-surface-container-highest"
             }
           >
@@ -486,6 +516,9 @@ export function FacturasCliente({
           <div className="flex items-center justify-between border-t border-outline-variant bg-surface-container-low px-6 py-3">
             <span className="text-xs font-light text-on-surface-variant">
               Mostrando {visibles.length} de {facturas.length}
+            </span>
+            <span className="text-xs font-bold tabular-nums text-on-surface">
+              Suma de lo filtrado: {fmt(sumaVisible)}
             </span>
           </div>
         </div>

@@ -100,19 +100,61 @@ async function importarFilasCrudas(
   // por fila para rescatar las buenas y omitir solo las malas.
   let importadas = 0;
   let primerMotivo: string | null = null;
+  const seleccion = "id, tipo, estado, fecha_vencimiento, cliente";
+  interface FacturaInsertada {
+    id: string;
+    tipo: string;
+    estado: string;
+    fecha_vencimiento: string | null;
+    cliente: string;
+  }
+  const insertadas: FacturaInsertada[] = [];
   for (let i = 0; i < listas.length; i += 50) {
     const bloque = listas.slice(i, i + 50);
-    const { error } = await supabase.from("facturas").insert(bloque);
+    const { data, error } = await supabase
+      .from("facturas")
+      .insert(bloque)
+      .select(seleccion);
     if (!error) {
       importadas += bloque.length;
+      insertadas.push(...((data ?? []) as FacturaInsertada[]));
       continue;
     }
     for (const fila of bloque) {
-      const { error: errorFila } = await supabase.from("facturas").insert(fila);
+      const { data: dataFila, error: errorFila } = await supabase
+        .from("facturas")
+        .insert(fila)
+        .select(seleccion)
+        .single();
       if (errorFila) {
         omitidas++;
         primerMotivo ??= motivoLegible(errorFila.code, errorFila.message);
-      } else importadas++;
+      } else {
+        importadas++;
+        if (dataFila) insertadas.push(dataFila as FacturaInsertada);
+      }
+    }
+  }
+
+  // Lo que llegó VENCIDO o PENDIENTE entra solo a la lista de
+  // Pendientes (se le crea su plan), para que el usuario no tenga
+  // que hacer el doble trabajo del triángulo factura por factura.
+  const sinPagar = insertadas.filter((f) => f.estado !== "pagado");
+  if (sinPagar.length > 0) {
+    const hoyISO = new Date().toISOString().slice(0, 10);
+    for (let i = 0; i < sinPagar.length; i += 50) {
+      await supabase.from("planes_pago").insert(
+        sinPagar.slice(i, i + 50).map((f) => ({
+          id_empresa: empresaId,
+          id_factura: f.id,
+          tipo: f.tipo === "pagar" ? "pago" : "cobro",
+          cuotas: 1,
+          fechas_pago: [f.fecha_vencimiento ?? hoyISO],
+          contacto_nombre: f.cliente,
+          destino_envio: "contacto",
+          estado: "activo",
+        }))
+      );
     }
   }
 

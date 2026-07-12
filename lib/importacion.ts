@@ -214,11 +214,13 @@ export function normalizarFila(
     : "cobrar";
 
   const estadoCrudo = (cruda.estado ?? "").toLowerCase();
-  const estado: FilaNormalizada["estado"] = /pend|abiert|debe/.test(estadoCrudo)
+  let estado: FilaNormalizada["estado"] = /pend|abiert|debe/.test(estadoCrudo)
     ? "pendiente"
     : /venc|mora/.test(estadoCrudo)
       ? "vencido"
       : "pagado"; // regla: todo entra pagado salvo indicación contraria
+  // "Pendiente" con la fecha ya pasada es, en la práctica, vencida
+  if (estado === "pendiente" && vencimiento < hoy) estado = "vencido";
 
   const medioCrudo = (cruda.medio_pago ?? "").toLowerCase();
   const medio: FilaNormalizada["medio_pago"] = /transf|consig|nequi|davipl/.test(medioCrudo)
