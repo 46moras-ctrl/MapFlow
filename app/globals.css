@@ -81,15 +81,17 @@ body {
   }
 }
 
-/* Micro-interacciones (DESIGN.md §9) */
+/* Micro-interacciones (DESIGN.md §9).
+   OJO: esta animación NO debe usar transform. Un transform (aunque
+   sea translateY(0) retenido por fill-mode) convierte al contenedor
+   en el ancla de los position:fixed hijos, y los modales dejan de
+   centrarse en la pantalla para irse al final del contenido. */
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 .fade-in-up {

@@ -41,9 +41,13 @@ function SaludPresupuesto({
   const disponible = presupuestoTotalMes > 0 ? presupuestoTotalMes - gastosActuales : 0;
   const pctConsumido =
     presupuestoTotalMes > 0 ? (gastosActuales / presupuestoTotalMes) * 100 : 0;
+  // El riesgo de nómina SOLO existe con tope definido (> $0) Y
+  // nómina registrada (> $0); sin datos, jamás se alarma al usuario.
+  const hayPresupuesto = presupuestoTotalMes > 0;
+  const hayNomina = costoNomina > 0;
   const alcanzaNomina = disponible >= costoNomina;
   const faltanteNomina = alcanzaNomina ? 0 : costoNomina - disponible;
-  const alertaLimite = pctConsumido >= 85;
+  const alertaLimite = hayPresupuesto && pctConsumido >= 85;
 
   let estado = {
     caja: "border-secondary-container bg-secondary-container/50",
@@ -54,7 +58,7 @@ function SaludPresupuesto({
     barra: "bg-secondary",
   };
 
-  if (presupuestoTotalMes === 0) {
+  if (!hayPresupuesto) {
     estado = {
       caja: "border-outline-variant bg-surface-container-low",
       texto: "text-on-surface-variant",
@@ -63,7 +67,7 @@ function SaludPresupuesto({
       mensaje: "Aún no has definido topes de gasto. Establece un presupuesto para ver tu salud financiera.",
       barra: "bg-outline-variant",
     };
-  } else if (costoNomina > 0 && !alcanzaNomina) {
+  } else if (hayNomina && !alcanzaNomina) {
     estado = {
       caja: "border-error/40 bg-error-container/70",
       texto: "text-on-error-container",
@@ -134,27 +138,30 @@ function SaludPresupuesto({
         </div>
       </div>
 
-      {/* Barra de consumo del presupuesto */}
-      <div className="mt-6">
-        <div className="mb-2 flex justify-between text-xs font-bold text-on-surface-variant">
-          <span>Consumido: {pctConsumido.toFixed(1)}%</span>
-          <span>
-            Tope: {fmt(presupuestoTotalMes)} · Nómina: {fmt(costoNomina)}
-          </span>
+      {/* Barra de consumo: solo tiene sentido con un tope definido */}
+      {hayPresupuesto && (
+        <div className="mt-6">
+          <div className="mb-2 flex justify-between text-xs font-bold text-on-surface-variant">
+            <span>Consumido: {pctConsumido.toFixed(1)}%</span>
+            <span>
+              Tope: {fmt(presupuestoTotalMes)}
+              {hayNomina ? ` · Nómina: ${fmt(costoNomina)}` : ""}
+            </span>
+          </div>
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-variant">
+            <div
+              className={cn(
+                "h-2.5 rounded-full transition-all duration-1000",
+                estado.barra
+              )}
+              style={{ width: `${Math.min(pctConsumido, 100)}%` }}
+            />
+          </div>
         </div>
-        <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-variant">
-          <div
-            className={cn(
-              "h-2.5 rounded-full transition-all duration-1000",
-              estado.barra
-            )}
-            style={{ width: `${Math.min(pctConsumido, 100)}%` }}
-          />
-        </div>
-      </div>
+      )}
 
       {/* Acción sugerida si la nómina está en riesgo */}
-      {costoNomina > 0 && !alcanzaNomina && (
+      {hayPresupuesto && hayNomina && !alcanzaNomina && (
         <Link
           href="/pendientes?tab=cobro"
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-error px-4 py-3 text-xs font-bold uppercase tracking-wider text-on-error transition-opacity hover:opacity-90"

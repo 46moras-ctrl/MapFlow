@@ -285,7 +285,6 @@ export function PendientesCliente({
                 <th className="px-6 py-3 text-right">Monto</th>
                 <th className="px-6 py-3">Cuotas</th>
                 <th className="px-6 py-3">Próximo pago</th>
-                <th className="px-6 py-3">Contacto</th>
                 <th className="px-6 py-3">Estado</th>
                 <th className="px-6 py-3 text-right">Acciones</th>
               </tr>
@@ -325,15 +324,6 @@ export function PendientesCliente({
                     </td>
                     <td className="px-6 py-3.5 font-light text-on-surface-variant">
                       {formatearFecha(proximaFecha(p))}
-                    </td>
-                    <td className="px-6 py-3.5 font-light text-on-surface-variant">
-                      <div className="flex flex-col">
-                        {p.contacto_telefono && <span>{p.contacto_telefono}</span>}
-                        {p.contacto_email && (
-                          <span className="truncate">{p.contacto_email}</span>
-                        )}
-                        {!p.contacto_telefono && !p.contacto_email && "—"}
-                      </div>
                     </td>
                     <td className="px-6 py-3.5">
                       <StatusBadge
