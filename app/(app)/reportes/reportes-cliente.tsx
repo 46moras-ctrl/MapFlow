@@ -241,8 +241,11 @@ export function ReportesCliente({
   // La salud del presupuesto siempre mira el MES ACTUAL (la nómina
   // y el tope son mensuales), sin importar el periodo del reporte.
   const mesActual = hoy.slice(0, 7);
+  // Solo gastos YA ocurridos (fecha ≤ hoy): los egresos programados
+  // a futuro dentro del mes no cuentan como consumidos, igual que
+  // en los KPI y en la página de Presupuestos.
   const gastosMesActual = filas
-    .filter((f) => !f.esIngreso && f.fecha.startsWith(mesActual))
+    .filter((f) => !f.esIngreso && f.fecha.startsWith(mesActual) && f.fecha <= hoy)
     .reduce((s, f) => s + f.monto, 0);
 
   function aplicarCalendario(e: React.FormEvent<HTMLFormElement>) {
