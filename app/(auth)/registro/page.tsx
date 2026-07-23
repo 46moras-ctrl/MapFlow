@@ -77,7 +77,14 @@ export default function RegistroPage() {
     const { data, error: errorAuth } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { nombre_negocio: negocio } },
+      options: {
+        data: { nombre_negocio: negocio },
+        // El enlace de confirmación debe volver a MapFlow (no al
+        // "Site URL" global de Supabase, que puede apuntar a otro
+        // proyecto). Así tras confirmar el correo se cae en nuestro
+        // /auth/callback → dashboard, y nunca en otro sitio.
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
 
     if (errorAuth || !data.user) {
