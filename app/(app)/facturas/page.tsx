@@ -1,4 +1,3 @@
-export const runtime = "edge";
 import { hayComisiones, type ConfigComisiones } from "@/lib/nomina";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { sincronizarSheetsSiToca } from "@/app/(app)/configuracion/importar-actions";

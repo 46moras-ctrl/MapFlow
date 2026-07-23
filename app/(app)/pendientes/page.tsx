@@ -1,4 +1,3 @@
-export const runtime = "edge";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { PendientesCliente, type PlanConFactura } from "./pendientes-cliente";
 import type { TipoPlan } from "@/lib/planes-pago";

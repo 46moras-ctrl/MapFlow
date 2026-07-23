@@ -1,4 +1,3 @@
-export const runtime = "edge";
 import type { EmpleadoDB } from "@/lib/nomina";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import type { SesionDB } from "./actions";

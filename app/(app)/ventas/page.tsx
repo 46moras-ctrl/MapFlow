@@ -1,4 +1,3 @@
-export const runtime = "edge";
 import Link from "next/link";
 import { Icon } from "@/components/app/icon";
 import { fmt, formatearFecha, hoyISO } from "@/lib/facturas";

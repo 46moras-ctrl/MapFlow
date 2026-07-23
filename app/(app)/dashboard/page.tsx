@@ -1,4 +1,3 @@
-export const runtime = "edge";
 import Link from "next/link";
 import { GraficaFlujo } from "@/components/app/grafica-flujo";
 import { Icon } from "@/components/app/icon";
