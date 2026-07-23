@@ -15,10 +15,26 @@ import {
   type EmpleadoDB,
 } from "@/lib/nomina";
 import { createSupabaseServer } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
 export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // Guardia de sesión: todas las rutas de este grupo (dashboard,
+  // facturas, movimientos, reportes, presupuestos, configuración,
+  // pendientes, ventas) exigen usuario autenticado. Antes lo hacía
+  // el middleware, pero el Edge Runtime de Vercel no lo toleraba;
+  // aquí, en un Server Component (Node), es más simple y robusto.
+  const supabase = createSupabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Sin sesión → al login
+  if (!user) {
+    redirect("/login");
+  }
+
   // Alertas para la campana + perfil de la empresa (foto del topbar
   // y colores de marca). select("*") a propósito: los campos nuevos
   // nacen en migraciones y la app no debe romperse sin ellas.
@@ -35,12 +51,7 @@ export default async function AppLayout({
     config_comisiones_pendiente?: CambioComisionPendiente | null;
   } | null = null;
   try {
-    const supabase = createSupabaseServer();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user) {
+    {
       const { data } = await supabase
         .from("empresas")
         .select("*")
