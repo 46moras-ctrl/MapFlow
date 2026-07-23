@@ -1,5 +1,7 @@
+export const runtime = "edge";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import type { FilaDinero } from "@/lib/finanzas";
+import { hayComisiones, type ConfigComisiones } from "@/lib/nomina";
 import { ReportesCliente, type DeudaMin } from "./reportes-cliente";
 
 // ============================================================
@@ -25,7 +27,6 @@ export default async function ReportesPage() {
   let filas: FilaDinero[] = [];
   let deudas: DeudaMin[] = [];
   let presupuestoMensual = 0;
-  let costoNomina = 0;
 
   if (empresa) {
     const [movs, facts, pres] = await Promise.all([
@@ -81,11 +82,6 @@ export default async function ReportesPage() {
     presupuestoMensual = (pres.data ?? [])
       .filter((p) => p.periodo === "mensual")
       .reduce((s, p) => s + Number(p.monto_tope), 0);
-
-    // Costo de nómina: el presupuesto cuya categoría sea "Nómina"
-    costoNomina = (pres.data ?? [])
-      .filter((p) => /n[oó]mina/i.test(p.categoria ?? ""))
-      .reduce((s, p) => s + Number(p.monto_tope), 0);
   }
 
   return (
@@ -94,8 +90,10 @@ export default async function ReportesPage() {
       filas={filas}
       deudas={deudas}
       presupuestoMensual={presupuestoMensual}
-      costoNomina={costoNomina}
       mostrarPresupuestos={Boolean(empresa?.mostrar_presupuestos)}
+      hayComisiones={hayComisiones(
+        (empresa?.config_comisiones as ConfigComisiones | null) ?? null
+      )}
     />
   );
 }

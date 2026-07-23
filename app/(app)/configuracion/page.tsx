@@ -1,3 +1,5 @@
+export const runtime = "edge";
+import type { EmpleadoDB } from "@/lib/nomina";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import type { SesionDB } from "./actions";
 import { ConfiguracionCliente, type EmpresaConfig } from "./configuracion-cliente";
@@ -18,6 +20,18 @@ export default async function ConfiguracionPage() {
     .eq("id_usuario", user?.id ?? "")
     .maybeSingle();
 
+  // Empleados de la pestaña Nómina (sin la migración, lista vacía)
+  let empleados: EmpleadoDB[] = [];
+  if (empresa) {
+    const { data: dataEmpleados } = await supabase
+      .from("empleados")
+      .select("*")
+      .eq("id_empresa", empresa.id)
+      .order("activo", { ascending: false })
+      .order("nombre", { ascending: true });
+    empleados = (dataEmpleados as EmpleadoDB[]) ?? [];
+  }
+
   let sesiones: SesionDB[] = [];
   let migracionPendiente = false;
   const { data: dataSesiones, error: errorSesiones } = await supabase
@@ -31,6 +45,7 @@ export default async function ConfiguracionPage() {
   return (
     <ConfiguracionCliente
       empresa={(empresa ?? {}) as EmpresaConfig}
+      empleados={empleados}
       sesiones={sesiones}
       migracionPendiente={migracionPendiente}
     />

@@ -15,6 +15,7 @@ export const CAMPOS_MAPFLOW = [
   { id: "tipo", label: "Tipo (cobro/pago)", requerido: false },
   { id: "estado", label: "Estado", requerido: false },
   { id: "medio_pago", label: "Medio de pago", requerido: false },
+  { id: "vendedor", label: "Vendedor (comisiones)", requerido: false },
 ] as const;
 
 // Campos extra del usuario ("Anexar campo"): columnas de SU archivo
@@ -45,6 +46,9 @@ export interface FilaNormalizada {
   tipo: "cobrar" | "pagar";
   estado: "pendiente" | "pagado" | "vencido";
   medio_pago: "transferencia" | "tarjeta" | "efectivo" | "credito" | null;
+  // Nombre del vendedor tal como viene en el archivo; el servidor
+  // lo cruza con los empleados comisionables para asignar comisión
+  vendedor: string | null;
 }
 
 /** Autodetecta el mapeo por nombres obvios de columnas */
@@ -59,6 +63,7 @@ export function autoMapear(encabezados: string[]): Mapeo {
     ["tipo", /^tipo/i],
     ["estado", /estado|status/i],
     ["medio_pago", /medio|m[eé]todo/i],
+    ["vendedor", /vendedor|vende|comisiona/i],
   ];
   const mapeo: Mapeo = {};
   const usadas = new Set<string>();
@@ -251,6 +256,7 @@ export function normalizarFila(
     tipo,
     estado,
     medio_pago: medio,
+    vendedor: cruda.vendedor?.trim() || null,
   };
 }
 

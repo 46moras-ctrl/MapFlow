@@ -24,29 +24,21 @@ type Rango = "1m" | "3m" | "6m" | "1a" | "total" | "custom";
 // ============================================================
 // SALUD DEL PRESUPUESTO — reemplaza el botón de Presupuesto:
 //   disponible = tope mensual − gastos del mes.
-//   · Sano: alcanza para la nómina y la operación.
-//   · Al límite: consumido ≥ 85% (nómina a salvo).
-//   · Riesgo crítico: lo disponible NO cubre la nómina → CTA
-//     "Cobrar facturas vencidas".
+//   · Sano: fondos suficientes para la operación.
+//   · Al límite: consumido ≥ 85%.
+//   · Excedido: gastos por encima del tope.
 // ============================================================
 function SaludPresupuesto({
   presupuestoTotalMes,
   gastosActuales,
-  costoNomina,
 }: {
   presupuestoTotalMes: number;
   gastosActuales: number;
-  costoNomina: number;
 }) {
   const disponible = presupuestoTotalMes > 0 ? presupuestoTotalMes - gastosActuales : 0;
   const pctConsumido =
     presupuestoTotalMes > 0 ? (gastosActuales / presupuestoTotalMes) * 100 : 0;
-  // El riesgo de nómina SOLO existe con tope definido (> $0) Y
-  // nómina registrada (> $0); sin datos, jamás se alarma al usuario.
   const hayPresupuesto = presupuestoTotalMes > 0;
-  const hayNomina = costoNomina > 0;
-  const alcanzaNomina = disponible >= costoNomina;
-  const faltanteNomina = alcanzaNomina ? 0 : costoNomina - disponible;
   const alertaLimite = hayPresupuesto && pctConsumido >= 85;
 
   let estado = {
@@ -67,15 +59,6 @@ function SaludPresupuesto({
       mensaje: "Aún no has definido topes de gasto. Establece un presupuesto para ver tu salud financiera.",
       barra: "bg-outline-variant",
     };
-  } else if (hayNomina && !alcanzaNomina) {
-    estado = {
-      caja: "border-error/40 bg-error-container/70",
-      texto: "text-on-error-container",
-      icono: "warning",
-      titulo: "Riesgo crítico de nómina",
-      mensaje: `Faltan ${fmt(faltanteNomina)} para cubrir la nómina del mes.`,
-      barra: "bg-error",
-    };
   } else if (disponible < 0) {
     estado = {
       caja: "border-error/40 bg-error-container/70",
@@ -94,13 +77,6 @@ function SaludPresupuesto({
       mensaje: "Has consumido más del 85%. Frena gastos no esenciales.",
       barra: "bg-tertiary",
     };
-  }
-
-  // Adjust default message if they have a payroll budget and it's safe
-  if (presupuestoTotalMes > 0 && disponible >= 0 && costoNomina > 0 && !alertaLimite) {
-    estado.mensaje = "Fondos suficientes para la nómina y operaciones.";
-  } else if (presupuestoTotalMes > 0 && alertaLimite && costoNomina > 0 && alcanzaNomina) {
-    estado.mensaje = "Has consumido más del 85%. Frena gastos no esenciales (nómina a salvo).";
   }
 
   return (
@@ -143,10 +119,7 @@ function SaludPresupuesto({
         <div className="mt-6">
           <div className="mb-2 flex justify-between text-xs font-bold text-on-surface-variant">
             <span>Consumido: {pctConsumido.toFixed(1)}%</span>
-            <span>
-              Tope: {fmt(presupuestoTotalMes)}
-              {hayNomina ? ` · Nómina: ${fmt(costoNomina)}` : ""}
-            </span>
+            <span>Tope: {fmt(presupuestoTotalMes)}</span>
           </div>
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-variant">
             <div
@@ -160,16 +133,6 @@ function SaludPresupuesto({
         </div>
       )}
 
-      {/* Acción sugerida si la nómina está en riesgo */}
-      {hayPresupuesto && hayNomina && !alcanzaNomina && (
-        <Link
-          href="/pendientes?tab=cobro"
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-error px-4 py-3 text-xs font-bold uppercase tracking-wider text-on-error transition-opacity hover:opacity-90"
-        >
-          <Icon name="payments" className="text-[16px]" />
-          Cobrar facturas vencidas
-        </Link>
-      )}
     </div>
   );
 }
@@ -188,15 +151,15 @@ export function ReportesCliente({
   filas,
   deudas,
   presupuestoMensual,
-  costoNomina,
   mostrarPresupuestos,
+  hayComisiones,
 }: {
   nombreEmpresa: string | null;
   filas: FilaDinero[];
   deudas: DeudaMin[];
   presupuestoMensual: number;
-  costoNomina: number;
   mostrarPresupuestos: boolean;
+  hayComisiones: boolean;
 }) {
   const hoy = hoyISO();
   const [rango, setRango] = useState<Rango>("1m");
@@ -238,8 +201,8 @@ export function ReportesCliente({
   const deudaCobro = deudas.filter((d) => d.esCobro).reduce((s, d) => s + d.monto, 0);
   const deudaPago = deudas.filter((d) => !d.esCobro).reduce((s, d) => s + d.monto, 0);
 
-  // La salud del presupuesto siempre mira el MES ACTUAL (la nómina
-  // y el tope son mensuales), sin importar el periodo del reporte.
+  // La salud del presupuesto siempre mira el MES ACTUAL (el tope
+  // es mensual), sin importar el periodo del reporte.
   const mesActual = hoy.slice(0, 7);
   // Solo gastos YA ocurridos (fecha ≤ hoy): los egresos programados
   // a futuro dentro del mes no cuentan como consumidos, igual que
@@ -329,6 +292,16 @@ export function ReportesCliente({
             </button>
           </form>
         )}
+        {/* Comisiones: solo con roles comisionables configurados */}
+        {hayComisiones && (
+          <Link
+            href="/reportes/comisiones"
+            className="ml-auto flex items-center gap-1.5 rounded-xl bg-secondary px-4 py-2 text-xs font-bold uppercase tracking-wider text-on-secondary transition-opacity hover:opacity-90"
+          >
+            <Icon name="percent" className="text-[16px]" />
+            Comisiones
+          </Link>
+        )}
       </div>
 
       {/* ===== KPIs del periodo (clic → detalle con subpestañas) ===== */}
@@ -350,7 +323,7 @@ export function ReportesCliente({
                 <Icon name="arrow_forward" className="text-[14px]" />
               </div>
             </div>
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-secondary-container/60 text-on-secondary-container">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-container text-on-primary-container">
               <Icon name="trending_up" className="text-[24px]" />
             </div>
           </div>
@@ -373,7 +346,7 @@ export function ReportesCliente({
                 <Icon name="arrow_forward" className="text-[14px]" />
               </div>
             </div>
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-tertiary-container text-on-tertiary-container">
               <Icon name="payments" className="text-[24px]" />
             </div>
           </div>
@@ -396,7 +369,7 @@ export function ReportesCliente({
                 <Icon name="arrow_forward" className="text-[14px]" />
               </div>
             </div>
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-tertiary-container text-on-tertiary-container">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-error-container text-on-error-container">
               <Icon name="account_balance_wallet" className="text-[24px]" />
             </div>
           </div>
@@ -408,7 +381,6 @@ export function ReportesCliente({
         <SaludPresupuesto
           presupuestoTotalMes={presupuestoMensual}
           gastosActuales={gastosMesActual}
-          costoNomina={costoNomina}
         />
       )}
 

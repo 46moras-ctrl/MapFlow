@@ -12,6 +12,8 @@ export type NivelAlerta = "urgente" | "media" | "suave" | "info";
 export interface Alerta {
   id: string;
   facturaId: string;
+  // Destino al tocar la alerta; sin href se abre /facturas/{facturaId}
+  href?: string;
   nivel: NivelAlerta;
   titulo: string;
   detalle: string;

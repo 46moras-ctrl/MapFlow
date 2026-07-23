@@ -11,6 +11,13 @@ import {
   type FacturaDB,
   type MedioPago,
 } from "@/lib/facturas";
+import {
+  normalizarConfigComisiones,
+  periodoCierre,
+  porcentajeParaVenta,
+  type ConfigComisiones,
+  type ConfigNomina,
+} from "@/lib/nomina";
 
 interface Resultado {
   ok: boolean;
@@ -101,6 +108,64 @@ async function vincularContacto(
   }
 }
 
+/**
+ * % de comisión del vendedor para ESTA venta, congelado al momento
+ * de asignarlo: si mañana cambia la configuración, las ventas ya
+ * registradas conservan el % con el que nacieron.
+ *   · Escalonada por monto → depende del tamaño de la venta.
+ *   · Escalonada por cantidad → depende de cuántas ventas lleva el
+ *     vendedor en el período de cierre (esta es la nº N; el sistema
+ *     sube el % solo al cruzar el tramo).
+ *   · Metas → null (solo bonificaciones).
+ */
+async function porcentajeVendedor(
+  supabase: SupabaseClient,
+  empresaId: string,
+  idVendedor: string,
+  monto: number,
+  fechaEmision: string,
+  excluirFacturaId?: string
+): Promise<number | null> {
+  const [{ data: empleado }, { data: empresa }] = await Promise.all([
+    supabase
+      .from("empleados")
+      .select("cargo")
+      .eq("id", idVendedor)
+      .eq("id_empresa", empresaId)
+      .maybeSingle(),
+    supabase
+      .from("empresas")
+      .select("config_comisiones, config_nomina")
+      .eq("id", empresaId)
+      .maybeSingle(),
+  ]);
+  if (!empleado) return null;
+
+  const config = empresa?.config_comisiones as ConfigComisiones | null;
+  const n = normalizarConfigComisiones(config);
+
+  // Escalonada por cantidad: contar las ventas del vendedor dentro
+  // del período de cierre al que pertenece esta venta
+  let numeroVenta: number | undefined;
+  if (n.modalidad === "venta" && n.tipo_venta === "escalonada" && n.escala === "cantidad") {
+    const cierre = (empresa?.config_nomina as ConfigNomina | null)?.cierre;
+    const { desde, hasta } = periodoCierre(cierre, fechaEmision);
+    let consulta = supabase
+      .from("facturas")
+      .select("id", { count: "exact", head: true })
+      .eq("id_empresa", empresaId)
+      .eq("id_vendedor", idVendedor)
+      .eq("tipo", "cobrar")
+      .gte("fecha_emision", desde)
+      .lte("fecha_emision", hasta);
+    if (excluirFacturaId) consulta = consulta.neq("id", excluirFacturaId);
+    const { count } = await consulta;
+    numeroVenta = (count ?? 0) + 1;
+  }
+
+  return porcentajeParaVenta(config, empleado.cargo as string, monto, numeroVenta);
+}
+
 function mensajeDuplicado(numero: string, tipo: string): string {
   const espacio = tipo === "pagar" ? "cuentas por pagar" : "cuentas por cobrar";
   return `Ya existe ${numero} en tus ${espacio}. No se creó un duplicado.`;
@@ -133,11 +198,29 @@ export async function crearFactura(datos: DatosFactura): Promise<Resultado> {
   // Libreta automática: el contacto se crea/actualiza y se vincula
   const idContacto = await vincularContacto(ctx.supabase, ctx.empresaId, datos);
 
+  // Vendedor de la venta (solo cobros): comisión sobre el monto
+  // total con el % congelado. Los campos solo viajan si hay
+  // vendedor, para no requerir la migración de nómina.
+  let camposComision = {};
+  if (datos.tipo === "cobrar" && datos.id_vendedor) {
+    camposComision = {
+      id_vendedor: datos.id_vendedor,
+      comision_porcentaje: await porcentajeVendedor(
+        ctx.supabase,
+        ctx.empresaId,
+        datos.id_vendedor,
+        datos.monto,
+        datos.fecha_emision
+      ),
+    };
+  }
+
   // REGLA: toda factura entra como PAGADA (celda blanca). Solo el
   // registro de un cobro/pago pendiente (triángulo ⚠️ / Pendientes)
   // la pasa a pendiente y la pinta de rosa.
   const { error } = await ctx.supabase.from("facturas").insert({
     ...filaDesdeDatos(datos, ctx.empresaId),
+    ...camposComision,
     id_contacto: idContacto,
     estado: datos.estado ?? "pagado",
   });
@@ -176,10 +259,44 @@ export async function actualizarFactura(
   // el nombre o se completan teléfono/email)
   const idContacto = await vincularContacto(ctx.supabase, ctx.empresaId, datos);
 
+  // Vendedor al editar: si cambia, se congela el % nuevo; si es el
+  // mismo, se conserva el % original; una comisión ya liquidada no
+  // se toca. Sin la migración de nómina este select falla y los
+  // campos simplemente no viajan.
+  let camposComision = {};
+  if (datos.id_vendedor !== undefined) {
+    const { data: actual } = await ctx.supabase
+      .from("facturas")
+      .select("id_vendedor, comision_liquidada")
+      .eq("id", id)
+      .eq("id_empresa", ctx.empresaId)
+      .maybeSingle();
+    if (actual && !actual.comision_liquidada) {
+      const nuevoVendedor =
+        datos.tipo === "pagar" ? null : datos.id_vendedor || null;
+      if (nuevoVendedor !== actual.id_vendedor) {
+        camposComision = {
+          id_vendedor: nuevoVendedor,
+          comision_porcentaje: nuevoVendedor
+            ? await porcentajeVendedor(
+                ctx.supabase,
+                ctx.empresaId,
+                nuevoVendedor,
+                datos.monto,
+                datos.fecha_emision,
+                id
+              )
+            : null,
+        };
+      }
+    }
+  }
+
   const { error } = await ctx.supabase
     .from("facturas")
     .update({
       ...fila,
+      ...camposComision,
       ...(idContacto ? { id_contacto: idContacto } : {}),
       ...(datos.estado ? { estado: datos.estado } : {}),
     })

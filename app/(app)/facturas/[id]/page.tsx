@@ -1,3 +1,4 @@
+export const runtime = "edge";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/app/icon";
@@ -11,6 +12,7 @@ import {
   formatearFecha,
   type FacturaDB,
 } from "@/lib/facturas";
+import { configurarMoneda } from "@/lib/moneda";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 export default async function DetalleFacturaPage({
@@ -24,12 +26,14 @@ export default async function DetalleFacturaPage({
     data: { user },
   } = await supabase.auth.getUser();
 
+  // select("*") a propósito: moneda nace en migracion_nomina.sql
   const { data: empresa } = await supabase
     .from("empresas")
-    .select("id, nombre")
+    .select("*")
     .eq("id_usuario", user?.id ?? "")
     .maybeSingle();
   if (!empresa) notFound();
+  configurarMoneda(empresa.moneda);
 
   const { data: factura, error } = await supabase
     .from("facturas")
@@ -49,6 +53,16 @@ export default async function DetalleFacturaPage({
         .from("facturas")
         .select("id, numero_factura, cliente, concepto, monto")
         .eq("id", factura.id_factura_origen)
+        .eq("id_empresa", empresa.id)
+        .maybeSingle()
+    : { data: null };
+
+  // Vendedor de la venta (comisiones), si fue asignado
+  const { data: vendedor } = factura.id_vendedor
+    ? await supabase
+        .from("empleados")
+        .select("nombre, cargo")
+        .eq("id", factura.id_vendedor)
         .eq("id_empresa", empresa.id)
         .maybeSingle()
     : { data: null };
@@ -209,6 +223,28 @@ export default async function DetalleFacturaPage({
                   <Icon name="event_repeat" className="text-[20px]" />
                   Pago recurrente: el día {factura.dia_recurrencia} de cada
                   mes. Al pagarla, MapFlow genera la del mes siguiente.
+                </div>
+              </div>
+            )}
+
+            {vendedor && (
+              <div className="sm:col-span-2">
+                <div className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                  Vendedor
+                </div>
+                <div className="mt-1 flex items-center gap-2 text-base text-on-surface">
+                  <Icon name="badge" className="text-[20px] text-on-surface-variant" />
+                  {vendedor.nombre} · {vendedor.cargo}
+                  {Number(factura.comision_porcentaje) > 0 && (
+                    <span className="rounded-full bg-secondary-container px-2.5 py-0.5 text-xs font-bold text-on-secondary-container">
+                      Comisión {Number(factura.comision_porcentaje)}% ={" "}
+                      {fmt(
+                        Math.round(
+                          Number(factura.monto) * Number(factura.comision_porcentaje)
+                        ) / 100
+                      )}
+                    </span>
+                  )}
                 </div>
               </div>
             )}

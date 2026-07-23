@@ -15,10 +15,11 @@ import { cn } from "@/lib/utils";
 
 type Serie = "ingresos" | "egresos" | "presupuesto" | "deudas";
 
-// Mapeo fijo de colores: INGRESOS = color primario de la marca,
-// EGRESOS = secundario, DEUDAS = el rosado de Pendientes.
-// Presupuesto es una línea de referencia punteada (solo si el
-// módulo está activo).
+// Mapeo fijo de colores:
+//   INGRESOS     = color primario de la marca (identidad)
+//   EGRESOS      = rosado claro (tertiary-container)
+//   PRESUPUESTO  = color secundario de la marca (identidad)
+//   DEUDAS       = rojo de alertas (--destructive)
 const SERIES: {
   id: Serie;
   label: string;
@@ -27,31 +28,43 @@ const SERIES: {
   punteada?: boolean;
 }[] = [
   { id: "ingresos", label: "Ingresos", color: "hsl(var(--primary))", conArea: true },
-  { id: "egresos", label: "Egresos", color: "hsl(var(--secondary))", conArea: true },
-  { id: "deudas", label: "Deudas", color: "#EFBBD0", conArea: true },
-  { id: "presupuesto", label: "Presupuesto", color: "#8D9286", conArea: false, punteada: true },
+  { id: "egresos", label: "Egresos", color: "#EFBBD0", conArea: true },
+  { id: "deudas", label: "Deudas", color: "hsl(var(--destructive))", conArea: true },
+  { id: "presupuesto", label: "Presupuesto", color: "hsl(var(--secondary))", conArea: false, punteada: true },
 ];
 
-/** Curva suave (catmull-rom → bézier cúbica) que pasa por los puntos */
-function curvaSuave(puntos: { x: number; y: number }[]): string {
+/**
+ * Curva monótona (evita oscilaciones/overshooting que ensucian la
+ * lectura). Usa interpolación cúbica con pendientes limitadas para
+ * que la curva NUNCA suba más alto que el punto máximo adyacente.
+ */
+function curvaMonotona(puntos: { x: number; y: number }[]): string {
   if (puntos.length === 0) return "";
   if (puntos.length === 1) return `M${puntos[0].x},${puntos[0].y}`;
+
   let d = `M${puntos[0].x},${puntos[0].y}`;
+
   for (let i = 0; i < puntos.length - 1; i++) {
-    const p0 = puntos[Math.max(0, i - 1)];
     const p1 = puntos[i];
     const p2 = puntos[i + 1];
-    const p3 = puntos[Math.min(puntos.length - 1, i + 2)];
-    const t = 0.3;
-    d += ` C${p1.x + (p2.x - p0.x) * t},${p1.y + (p2.y - p0.y) * t} ${p2.x - (p3.x - p1.x) * t},${p2.y - (p3.y - p1.y) * t} ${p2.x},${p2.y}`;
+    // Handle control point: 1/3 of horizontal distance
+    const cpx = (p2.x - p1.x) / 3;
+    d += ` C${p1.x + cpx},${p1.y} ${p2.x - cpx},${p2.y} ${p2.x},${p2.y}`;
   }
   return d;
 }
 
 /** La misma curva, cerrada hasta la base para rellenar el área */
-function areaSuave(puntos: { x: number; y: number }[], baseY: number): string {
+function areaMonotona(puntos: { x: number; y: number }[], baseY: number): string {
   if (puntos.length === 0) return "";
-  return `${curvaSuave(puntos)} L${puntos[puntos.length - 1].x},${baseY} L${puntos[0].x},${baseY} Z`;
+  return `${curvaMonotona(puntos)} L${puntos[puntos.length - 1].x},${baseY} L${puntos[0].x},${baseY} Z`;
+}
+
+/** Formato compacto para el eje Y: 1.2M, 350k, 800 */
+function fmtEje(valor: number): string {
+  if (valor >= 1_000_000) return `${(valor / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (valor >= 1_000) return `${Math.round(valor / 1_000)}k`;
+  return String(Math.round(valor));
 }
 
 export function GraficaFlujo({
@@ -76,23 +89,33 @@ export function GraficaFlujo({
   );
   const visibles = seriesDisponibles.filter((s) => activas[s.id]);
 
-  // Lienzo: viewBox fijo, se estira al ancho de la tarjeta
+  // Lienzo con más altura para que las curvas tengan espacio
   const W = 720;
-  const H = 240;
-  const PAD_X = 42;
-  const PAD_TOP = 18;
-  const PAD_BOTTOM = 26;
+  const H = 280;
+  const PAD_LEFT = 52;
+  const PAD_RIGHT = 16;
+  const PAD_TOP = 20;
+  const PAD_BOTTOM = 32;
+  const plotW = W - PAD_LEFT - PAD_RIGHT;
   const plotH = H - PAD_TOP - PAD_BOTTOM;
   const baseY = PAD_TOP + plotH;
-  const paso = datos.length > 1 ? (W - PAD_X * 2) / (datos.length - 1) : 0;
+  const paso = datos.length > 1 ? plotW / (datos.length - 1) : 0;
 
-  const max = Math.max(1, ...datos.flatMap((d) => visibles.map((s) => d[s.id])));
+  // Escala Y con margen superior del 10% para que no toquen el tope
+  const maxRaw = Math.max(1, ...datos.flatMap((d) => visibles.map((s) => d[s.id])));
+  const max = maxRaw * 1.1;
 
   const puntosDe = (serie: Serie) =>
     datos.map((d, i) => ({
-      x: PAD_X + i * paso,
+      x: PAD_LEFT + i * paso,
       y: PAD_TOP + plotH - (d[serie] / max) * plotH,
     }));
+
+  // Escalones bonitos para el eje Y (4 líneas)
+  const escalones = [0.25, 0.5, 0.75, 1].map((f) => ({
+    valor: max * f,
+    y: PAD_TOP + plotH - f * plotH,
+  }));
 
   return (
     <div>
@@ -105,41 +128,50 @@ export function GraficaFlujo({
         <defs>
           {SERIES.map((s) => (
             <linearGradient key={s.id} id={`area-${s.id}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={s.color} stopOpacity={0.35} />
-              <stop offset="70%" stopColor={s.color} stopOpacity={0.08} />
-              <stop offset="100%" stopColor={s.color} stopOpacity={0} />
+              <stop offset="0%" stopColor={s.color} stopOpacity={0.25} />
+              <stop offset="100%" stopColor={s.color} stopOpacity={0.03} />
             </linearGradient>
           ))}
         </defs>
 
-        {/* Rejilla horizontal recesiva con montos de referencia */}
-        {[0.25, 0.5, 0.75, 1].map((frac) => {
-          const y = PAD_TOP + plotH - frac * plotH;
-          return (
-            <g key={frac}>
-              <line
-                x1={PAD_X}
-                x2={W - PAD_X}
-                y1={y}
-                y2={y}
-                stroke="#E3E2DE"
-                strokeWidth="1"
-                strokeDasharray="3 6"
-              />
-              <text
-                x={PAD_X - 8}
-                y={y + 3}
-                textAnchor="end"
-                className="fill-on-surface-variant text-[9px] font-light"
-              >
-                {max * frac >= 1000
-                  ? `${Math.round((max * frac) / 1000)}k`
-                  : Math.round(max * frac)}
-              </text>
-            </g>
-          );
-        })}
-        <line x1={PAD_X} x2={W - PAD_X} y1={baseY} y2={baseY} stroke="#E3E2DE" />
+        {/* Rejilla horizontal sutil */}
+        {escalones.map((e) => (
+          <g key={e.valor}>
+            <line
+              x1={PAD_LEFT}
+              x2={W - PAD_RIGHT}
+              y1={e.y}
+              y2={e.y}
+              stroke="#E8E7E3"
+              strokeWidth="0.5"
+            />
+            <text
+              x={PAD_LEFT - 10}
+              y={e.y + 3.5}
+              textAnchor="end"
+              className="fill-on-surface-variant text-[9px] font-light"
+            >
+              {fmtEje(e.valor)}
+            </text>
+          </g>
+        ))}
+        {/* Línea base */}
+        <line
+          x1={PAD_LEFT}
+          x2={W - PAD_RIGHT}
+          y1={baseY}
+          y2={baseY}
+          stroke="#E8E7E3"
+          strokeWidth="0.5"
+        />
+        <text
+          x={PAD_LEFT - 10}
+          y={baseY + 3.5}
+          textAnchor="end"
+          className="fill-on-surface-variant text-[9px] font-light"
+        >
+          0
+        </text>
 
         {/* Áreas suavizadas (primero, para que las líneas queden encima) */}
         {visibles.map(
@@ -147,43 +179,52 @@ export function GraficaFlujo({
             s.conArea && (
               <path
                 key={`a-${s.id}`}
-                d={areaSuave(puntosDe(s.id), baseY)}
+                d={areaMonotona(puntosDe(s.id), baseY)}
                 fill={`url(#area-${s.id})`}
               />
             )
         )}
 
-        {/* Curvas spline */}
+        {/* Curvas */}
         {visibles.map((s) => (
           <path
             key={`c-${s.id}`}
-            d={curvaSuave(puntosDe(s.id))}
+            d={curvaMonotona(puntosDe(s.id))}
             fill="none"
             stroke={s.color}
-            strokeWidth="2.5"
+            strokeWidth="2"
             strokeLinecap="round"
-            strokeDasharray={s.punteada ? "5 6" : undefined}
+            strokeLinejoin="round"
+            strokeDasharray={s.punteada ? "6 4" : undefined}
           />
         ))}
 
-        {/* Puntos con tooltip nativo por mes y serie */}
+        {/* Puntos solo en los vértices (limpios, sin ruido) */}
         {visibles.map((s) =>
           puntosDe(s.id).map((p, i) => (
             <g key={`p-${s.id}-${i}`}>
-              <circle cx={p.x} cy={p.y} r="3" fill="#FFFFFF" stroke={s.color} strokeWidth="2" />
-              <circle cx={p.x} cy={p.y} r="12" fill="transparent">
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r="3.5"
+                fill="#FFFFFF"
+                stroke={s.color}
+                strokeWidth="1.5"
+              />
+              {/* Zona de hover invisible más grande para el tooltip */}
+              <circle cx={p.x} cy={p.y} r="14" fill="transparent">
                 <title>{`${datos[i].etiqueta} — ${s.label}: ${fmt(datos[i][s.id])}`}</title>
               </circle>
             </g>
           ))
         )}
 
-        {/* Meses en la base */}
+        {/* Etiquetas de meses en la base */}
         {datos.map((d, i) => (
           <text
             key={d.ym}
-            x={PAD_X + i * paso}
-            y={H - 8}
+            x={PAD_LEFT + i * paso}
+            y={H - 10}
             textAnchor="middle"
             className="fill-on-surface-variant text-[10px] font-light"
           >

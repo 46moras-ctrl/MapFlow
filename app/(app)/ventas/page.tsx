@@ -1,6 +1,8 @@
+export const runtime = "edge";
 import Link from "next/link";
 import { Icon } from "@/components/app/icon";
 import { fmt, formatearFecha, hoyISO } from "@/lib/facturas";
+import { configurarMoneda } from "@/lib/moneda";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -40,9 +42,10 @@ export default async function VentasPage({
 
   const { data: empresa } = await supabase
     .from("empresas")
-    .select("id, nombre")
+    .select("*")
     .eq("id_usuario", user?.id ?? "")
     .maybeSingle();
+  configurarMoneda(empresa?.moneda);
 
   const hoy = hoyISO();
   const esISO = (s: string | undefined): s is string => /^\d{4}-\d{2}-\d{2}$/.test(s ?? "");

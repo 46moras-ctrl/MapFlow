@@ -156,7 +156,7 @@ export function Topbar({
                         return (
                           <li key={a.id}>
                             <Link
-                              href={`/facturas/${a.facturaId}`}
+                              href={a.href ?? `/facturas/${a.facturaId}`}
                               onClick={() => setAbierto(false)}
                               className={cn(
                                 "flex items-start gap-3 rounded-xl border p-3 transition-all",

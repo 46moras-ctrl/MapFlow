@@ -36,13 +36,22 @@ export interface FacturaConContacto extends FacturaDB {
   contacto: { nombre: string; telefono: string | null; email: string | null } | null;
 }
 
+// Empleado activo de un rol comisionable (Ajustes → Nómina)
+export interface VendedorOpcion {
+  id: string;
+  nombre: string;
+  cargo: string;
+}
+
 type FiltroTipo = "todas" | "cobros" | "pagos";
 
 export function FacturasCliente({
   facturas,
+  vendedores,
   nombreEmpresa,
 }: {
   facturas: FacturaConContacto[];
+  vendedores: VendedorOpcion[];
   nombreEmpresa: string | null;
 }) {
   const hoy = hoyISO();
@@ -50,8 +59,6 @@ export function FacturasCliente({
   const searchParams = useSearchParams();
 
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>("todas");
-  // Saldadas = ya pagadas · Pendientes = aún sin pagar (rosadas)
-  const [filtroEstado, setFiltroEstado] = useState<"todas" | "saldadas" | "pendientes">("todas");
   const [busqueda, setBusqueda] = useState("");
   // modal === undefined: cerrado · null: crear · FacturaDB: editar
   const [modal, setModal] = useState<FacturaDB | null | undefined>(undefined);
@@ -87,16 +94,12 @@ export function FacturasCliente({
       filtroTipo === "todas" ||
       (filtroTipo === "cobros" && (f.tipo ?? "cobrar") === "cobrar") ||
       (filtroTipo === "pagos" && f.tipo === "pagar");
-    const pasaEstado =
-      filtroEstado === "todas" ||
-      (filtroEstado === "saldadas" && f.estado === "pagado") ||
-      (filtroEstado === "pendientes" && f.estado !== "pagado");
     const q = busqueda.trim().toLowerCase();
     const pasaBusqueda =
       !q ||
       f.cliente.toLowerCase().includes(q) ||
       f.numero_factura.toLowerCase().includes(q);
-    return pasaTipo && pasaEstado && pasaBusqueda;
+    return pasaTipo && pasaBusqueda;
   });
 
   // Cuánto dinero suma lo que se está viendo con los filtros puestos
@@ -125,6 +128,10 @@ export function FacturasCliente({
       concepto: String(fd.get("concepto") ?? "") || null,
       telefono_contacto: String(fd.get("telefono_contacto") ?? "") || null,
       email_contacto: String(fd.get("email_contacto") ?? "") || null,
+      // Vendedor: solo existe si hay roles comisionables configurados
+      ...(vendedores.length > 0
+        ? { id_vendedor: String(fd.get("id_vendedor") ?? "") || null }
+        : {}),
       ...(tipoForm === "pagar"
         ? {
             medio_pago_previsto:
@@ -216,7 +223,8 @@ export function FacturasCliente({
         </div>
       )}
 
-      {/* Filtro Cobros | Pagos + buscador, encima de la tabla */}
+      {/* Filtro Todas | Cobros | Pagos + buscador; al otro extremo,
+          el acceso directo a Pendientes (su color marca lo pendiente) */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-outline-variant bg-surface p-4">
         {(
           [
@@ -238,37 +246,6 @@ export function FacturasCliente({
             {f.label}
           </button>
         ))}
-        <span className="h-5 w-px bg-outline-variant" />
-        {(
-          [
-            { id: "todas", label: "Todas" },
-            { id: "saldadas", label: "Saldadas" },
-            { id: "pendientes", label: "Pendientes" },
-          ] as const
-        ).map((f) => (
-          <button
-            key={`e-${f.id}`}
-            type="button"
-            onClick={() => setFiltroEstado(f.id)}
-            className={
-              filtroEstado === f.id
-                ? "rounded-lg bg-tertiary px-4 py-1.5 text-xs font-bold text-on-tertiary"
-                : "rounded-lg bg-surface-container-high px-4 py-1.5 text-xs font-light text-on-surface-variant transition-colors hover:bg-surface-container-highest"
-            }
-          >
-            {f.label}
-          </button>
-        ))}
-        <span className="flex items-center gap-1.5 text-xs font-light text-on-surface-variant">
-          <span className="h-3 w-3 rounded-sm bg-tertiary-container" />
-          color ={" "}
-          <Link
-            href="/pendientes"
-            className="font-bold text-tertiary underline-offset-2 hover:underline"
-          >
-            pendientes
-          </Link>
-        </span>
         <label className="ml-auto flex items-center gap-2 rounded-full bg-surface-container-low px-4 py-2">
           <Icon name="search" className="text-[18px] text-on-surface-variant" />
           <input
@@ -279,6 +256,13 @@ export function FacturasCliente({
             className="w-52 bg-transparent text-sm font-light text-on-surface outline-none placeholder:text-on-surface-variant/60"
           />
         </label>
+        <Link
+          href="/pendientes"
+          className="flex items-center gap-1.5 rounded-xl bg-tertiary px-4 py-2 text-xs font-bold uppercase tracking-wider text-on-tertiary transition-opacity hover:opacity-90"
+        >
+          <Icon name="pending_actions" className="text-[16px]" />
+          Pendientes
+        </Link>
       </div>
 
       {/* Tabla o estado vacío */}
@@ -311,16 +295,17 @@ export function FacturasCliente({
             return (
               <div
                 key={f.id}
-                className={cn(
-                  "rounded-xl border p-4 shadow-level-1",
-                  pendiente
-                    ? "border-tertiary-container bg-tertiary-container/50"
-                    : "border-outline-variant bg-surface-container-lowest"
-                )}
+                className="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-level-1"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-on-surface">
+                    {/* Pendiente = solo el nombre en el color de pendientes */}
+                    <div
+                      className={cn(
+                        "truncate text-sm font-semibold",
+                        pendiente ? "text-tertiary" : "text-on-surface"
+                      )}
+                    >
                       {f.cliente}
                     </div>
                     <div className="text-xs font-light text-on-surface-variant">
@@ -398,17 +383,12 @@ export function FacturasCliente({
                 return (
                   <tr
                     key={f.id}
-                    className={cn(
-                      "group text-sm transition-colors",
-                      // Sin badges de estado: lo pendiente/vencido se
-                      // resalta con el color de acento; lo pagado, no.
-                      pendiente
-                        ? "bg-tertiary-container/50 hover:bg-tertiary-container/70"
-                        : "hover:bg-surface-container"
-                    )}
+                    className="group text-sm transition-colors hover:bg-surface-container"
                   >
                     <td className="px-6 py-3.5">
                       <div className="flex items-center gap-3">
+                        {/* Pendiente = círculo y nombre en el color de
+                            pendientes (rosado oscuro), sin teñir la fila */}
                         <span
                           className={cn(
                             "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold",
@@ -420,7 +400,12 @@ export function FacturasCliente({
                           {iniciales(f.cliente)}
                         </span>
                         <div className="min-w-0">
-                          <div className="truncate font-semibold text-on-surface">
+                          <div
+                            className={cn(
+                              "truncate font-semibold",
+                              pendiente ? "text-tertiary" : "text-on-surface"
+                            )}
+                          >
                             {f.cliente}
                           </div>
                           {f.concepto && (
@@ -682,6 +667,30 @@ export function FacturasCliente({
                   className={claseCampo}
                 />
               </div>
+
+              {/* Vendedor (comisiones): solo en cobros y solo si hay
+                  roles comisionables. Una factura = un vendedor. */}
+              {tipoForm === "cobrar" && vendedores.length > 0 && (
+                <div>
+                  <label className={claseEtiqueta}>Vendedor</label>
+                  <select
+                    name="id_vendedor"
+                    defaultValue={modal?.id_vendedor ?? ""}
+                    className={claseCampo}
+                  >
+                    <option value="">Sin vendedor (no genera comisión)</option>
+                    {vendedores.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.nombre} — {v.cargo}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] font-light text-on-surface-variant">
+                    La comisión se calcula sobre el monto total de la venta
+                    con el % del cargo, sin importar cómo se pague.
+                  </p>
+                </div>
+              )}
 
               {tipoForm === "pagar" && (
                 <>

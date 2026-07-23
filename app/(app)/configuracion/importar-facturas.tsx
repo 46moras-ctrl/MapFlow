@@ -129,8 +129,10 @@ function MapeoColumnas({
         Anexar campo
       </button>
       <p className="text-[11px] font-light text-on-surface-variant">
-        ¿Tu archivo trae algo que MapFlow no tiene (bodega, vendedor…)?
+        ¿Tu archivo trae algo que MapFlow no tiene (bodega, ruta…)?
         Anéxalo y quedará guardado dentro del concepto de cada factura.
+        La columna Vendedor se cruza por nombre con tus empleados
+        comisionables para asignarles su comisión.
       </p>
     </div>
   );

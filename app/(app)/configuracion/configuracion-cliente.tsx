@@ -7,6 +7,14 @@ import { aplicarColoresMarca } from "@/components/app/tema-marca";
 import { ImportarFacturas } from "./importar-facturas";
 import type { ConexionSheets } from "./importar-actions";
 import { confirmarBorrado, solicitarCodigoBorrado } from "./borrar-actions";
+import { SeccionNomina } from "./nomina-config";
+import { MONEDAS, PAISES } from "@/lib/moneda";
+import type {
+  CambioComisionPendiente,
+  ConfigComisiones,
+  ConfigNomina,
+  EmpleadoDB,
+} from "@/lib/nomina";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -42,9 +50,14 @@ export interface EmpresaConfig {
   notificaciones?: Partial<PreferenciasNotificaciones>;
   mostrar_presupuestos?: boolean;
   hoja_calculo?: ConexionSheets | null;
+  pais?: string | null;
+  moneda?: string | null;
+  config_nomina?: ConfigNomina | null;
+  config_comisiones?: ConfigComisiones | null;
+  config_comisiones_pendiente?: CambioComisionPendiente | null;
 }
 
-type Seccion = "perfil" | "notificaciones" | "sesiones";
+type Seccion = "perfil" | "nomina" | "notificaciones" | "sesiones";
 
 const COLORES_BASE: ColoresMarca = {
   primario: "#4E6544",
@@ -185,10 +198,12 @@ function Tarjeta({
 
 export function ConfiguracionCliente({
   empresa,
+  empleados,
   sesiones,
   migracionPendiente,
 }: {
   empresa: EmpresaConfig;
+  empleados: EmpleadoDB[];
   sesiones: SesionDB[];
   migracionPendiente: boolean;
 }) {
@@ -202,6 +217,10 @@ export function ConfiguracionCliente({
   const [nombre, setNombre] = useState(empresa.nombre ?? "");
   const [foto, setFoto] = useState<string | null>(empresa.foto_url ?? null);
   const inputFoto = useRef<HTMLInputElement>(null);
+  // País y moneda: la moneda formatea TODOS los montos de la app
+  // (no convierte valores; cada empresa maneja una sola moneda)
+  const [pais, setPais] = useState(empresa.pais ?? "");
+  const [moneda, setMoneda] = useState(empresa.moneda ?? "");
 
   // ----- Módulos -----
   const [mostrarPresupuestos, setMostrarPresupuestos] = useState(
@@ -303,11 +322,18 @@ export function ConfiguracionCliente({
 
   function guardarSeccionPerfil() {
     startTransition(async () => {
-      const res = await guardarPerfil({ nombre, foto_url: foto });
+      const res = await guardarPerfil({ nombre, foto_url: foto, pais, moneda });
       if (!res.ok) return fallo(res.error ?? "No se pudo guardar.");
       exito("Perfil guardado.");
-      router.refresh(); // el círculo del topbar toma la foto nueva
+      router.refresh(); // el topbar toma la foto y la app la moneda
     });
+  }
+
+  // Elegir país sugiere su moneda (el usuario puede cambiarla)
+  function cambiarPais(nuevo: string) {
+    setPais(nuevo);
+    const sugerida = PAISES.find((p) => p.nombre === nuevo)?.moneda;
+    if (sugerida) setMoneda(sugerida);
   }
 
   // El toggle de Presupuestos se guarda al momento y refresca el menú
@@ -540,6 +566,7 @@ export function ConfiguracionCliente({
         {(
           [
             { id: "perfil", label: "Perfil", icono: "storefront" },
+            { id: "nomina", label: "Nómina", icono: "groups" },
             { id: "notificaciones", label: "Notificaciones", icono: "notifications" },
             { id: "sesiones", label: "Sesiones", icono: "devices" },
           ] as const
@@ -612,6 +639,48 @@ export function ConfiguracionCliente({
                     </p>
                   </div>
                 </div>
+
+                {/* País y moneda: define la moneda ANTES de cargar tu
+                    información. Formatea todos los montos de la app. */}
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={claseEtiqueta}>País</label>
+                    <select
+                      value={pais}
+                      onChange={(e) => cambiarPais(e.target.value)}
+                      aria-label="País de la empresa"
+                      className={claseCampo}
+                    >
+                      <option value="">— Elige tu país —</option>
+                      {PAISES.map((p) => (
+                        <option key={p.nombre} value={p.nombre}>
+                          {p.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={claseEtiqueta}>Moneda</label>
+                    <select
+                      value={moneda}
+                      onChange={(e) => setMoneda(e.target.value)}
+                      aria-label="Moneda de la empresa"
+                      className={claseCampo}
+                    >
+                      <option value="">— Elige tu moneda —</option>
+                      {MONEDAS.map((m) => (
+                        <option key={m.codigo} value={m.codigo}>
+                          {m.nombre} ({m.codigo})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="-mt-2 text-[11px] font-light text-on-surface-variant sm:col-span-2">
+                    Todos los montos de la plataforma se mostrarán en esta
+                    moneda. No convierte valores: solo cambia el formato.
+                  </p>
+                </div>
+
                 <div className="mt-5 flex justify-end">
                   <button
                     type="button"
@@ -844,6 +913,18 @@ export function ConfiguracionCliente({
         </div>
       )}
 
+      {/* ================ SECCIÓN: NÓMINA ================ */}
+      {seccion === "nomina" && (
+        <SeccionNomina
+          empleados={empleados}
+          configNomina={empresa.config_nomina ?? null}
+          configComisiones={empresa.config_comisiones ?? null}
+          cambioPendiente={empresa.config_comisiones_pendiente ?? null}
+          exito={exito}
+          fallo={fallo}
+        />
+      )}
+
       {/* ============= SECCIÓN B: NOTIFICACIONES ============= */}
       {seccion === "notificaciones" && (
         <div className="flex flex-col gap-6">
@@ -1025,7 +1106,8 @@ export function ConfiguracionCliente({
         </Tarjeta>
       )}
 
-      {/* ===== ZONA DE PELIGRO: borrar datos de la cuenta ===== */}
+      {/* ===== ZONA DE PELIGRO: borrar datos (solo en Perfil) ===== */}
+      {seccion === "perfil" && (
       <div className="mt-4 rounded-xl border border-error/40 bg-error-container/20 p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -1049,6 +1131,7 @@ export function ConfiguracionCliente({
           </button>
         </div>
       </div>
+      )}
 
       {/* ===== Modal de confirmación del borrado ===== */}
       {borrarAbierto && (

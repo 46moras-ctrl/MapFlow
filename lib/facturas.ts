@@ -1,5 +1,7 @@
 // Tipos y helpers para facturas reales de Supabase
 
+import { formatearMoneda } from "@/lib/moneda";
+
 export type TipoFactura = "cobrar" | "pagar";
 export type MedioPago = "transferencia" | "tarjeta" | "efectivo" | "credito";
 
@@ -20,6 +22,13 @@ export interface FacturaDB {
   dia_recurrencia: number | null;
   id_factura_origen: string | null;
   id_contacto: string | null; // libreta de contactos (tabla contactos)
+  // Comisiones (migracion_nomina.sql): vendedor asignado a la venta
+  // y % CONGELADO al momento de asignarlo (cambios futuros del %
+  // del rol no tocan el historial).
+  id_vendedor: string | null;
+  comision_porcentaje: number | null;
+  comision_liquidada: boolean;
+  id_liquidacion: string | null;
   created_at: string;
 }
 
@@ -61,6 +70,9 @@ export interface DatosFactura {
   // el contacto en la libreta y se vincula a la factura.
   telefono_contacto?: string | null;
   email_contacto?: string | null;
+  // Vendedor que hizo la venta (solo cobros, si hay roles
+  // comisionables configurados). "" o null = sin comisión.
+  id_vendedor?: string | null;
 }
 
 export type EstadoVisual = "pagada" | "vencida" | "por_vencer" | "pendiente";
@@ -158,8 +170,11 @@ export function formatearFecha(iso: string | null): string {
   return `${Number(d)} ${mes} ${a}`;
 }
 
-/** Formato de moneda determinista (mismo resultado en server y cliente), siempre con 2 decimales */
+/**
+ * Formato de moneda determinista (mismo resultado en server y
+ * cliente). Usa la moneda elegida en Perfil → Datos de la empresa;
+ * sin moneda configurada mantiene el formato histórico ($1,234.56).
+ */
 export function fmt(n: number): string {
-  const [entero, decimales] = Number(n).toFixed(2).split(".");
-  return "$" + entero.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + decimales;
+  return formatearMoneda(n);
 }

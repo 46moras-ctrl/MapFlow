@@ -1,8 +1,10 @@
+export const runtime = "edge";
 import Link from "next/link";
 import { GraficaFlujo } from "@/components/app/grafica-flujo";
 import { Icon } from "@/components/app/icon";
 import { fmt, hoyISO } from "@/lib/facturas";
 import { construirFlujo, ultimosMeses, type FilaDinero } from "@/lib/finanzas";
+import { configurarMoneda } from "@/lib/moneda";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -23,9 +25,10 @@ export default async function DashboardPage() {
 
   const { data: empresa } = await supabase
     .from("empresas")
-    .select("id, nombre")
+    .select("*")
     .eq("id_usuario", user?.id ?? "")
     .maybeSingle();
+  configurarMoneda(empresa?.moneda);
 
   const hoy = hoyISO();
 

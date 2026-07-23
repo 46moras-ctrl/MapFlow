@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { MONEDAS } from "@/lib/moneda";
 import { contextoEmpresa } from "@/lib/supabase/contexto";
 
 interface Resultado {
@@ -11,9 +12,25 @@ interface Resultado {
 const FALTA_MIGRACION =
   "Falta aplicar la migración supabase/migracion_reestructura_ui.sql en Supabase.";
 
-function errorAmigable(codigo: string | undefined, mensaje: string): string {
-  // 42703 columna inexistente / 42P01 tabla inexistente → falta migración
-  if (codigo === "42703" || codigo === "42P01") return FALTA_MIGRACION;
+/** ¿El error viene de una columna/tabla que aún no existe? Supabase
+ *  lo reporta como 42703/42P01 (Postgres) o PGRST204/PGRST205
+ *  ("schema cache" de la API) según por dónde llegue. */
+function faltaMigracion(codigo?: string, detalle?: string): boolean {
+  return (
+    codigo === "42703" ||
+    codigo === "42P01" ||
+    codigo === "PGRST204" ||
+    codigo === "PGRST205" ||
+    /schema cache/i.test(detalle ?? "")
+  );
+}
+
+function errorAmigable(
+  codigo: string | undefined,
+  detalle: string | undefined,
+  mensaje: string
+): string {
+  if (faltaMigracion(codigo, detalle)) return FALTA_MIGRACION;
   return mensaje;
 }
 
@@ -22,6 +39,8 @@ function errorAmigable(codigo: string | undefined, mensaje: string): string {
 export async function guardarPerfil(datos: {
   nombre: string;
   foto_url: string | null;
+  pais?: string | null;
+  moneda?: string | null;
 }): Promise<Resultado> {
   if (!datos.nombre.trim())
     return { ok: false, error: "El nombre de la empresa es obligatorio." };
@@ -29,18 +48,37 @@ export async function guardarPerfil(datos: {
   // este tope evita que alguien guarde un archivo gigante.
   if (datos.foto_url && datos.foto_url.length > 200_000)
     return { ok: false, error: "La imagen es demasiado grande. Usa una más pequeña." };
+  if (datos.moneda && !MONEDAS.some((m) => m.codigo === datos.moneda))
+    return { ok: false, error: "Esa moneda no está soportada." };
 
   const ctx = await contextoEmpresa();
   if ("error" in ctx) return { ok: false, error: ctx.error };
 
   const { error } = await ctx.supabase
     .from("empresas")
-    .update({ nombre: datos.nombre.trim(), foto_url: datos.foto_url })
+    .update({
+      nombre: datos.nombre.trim(),
+      foto_url: datos.foto_url,
+      // País y moneda solo viajan si el formulario los envía; la
+      // moneda elegida formatea todos los montos de la plataforma.
+      ...(datos.pais !== undefined ? { pais: datos.pais?.trim() || null } : {}),
+      ...(datos.moneda !== undefined ? { moneda: datos.moneda || null } : {}),
+    })
     .eq("id", ctx.empresaId);
 
-  if (error)
-    return { ok: false, error: errorAmigable(error.code, "No se pudo guardar el perfil.") };
-  revalidatePath("/configuracion");
+  if (error) {
+    if (
+      faltaMigracion(error.code, error.message) &&
+      (datos.pais !== undefined || datos.moneda !== undefined)
+    )
+      return {
+        ok: false,
+        error: "Falta aplicar la migración supabase/migracion_nomina.sql en Supabase.",
+      };
+    return { ok: false, error: errorAmigable(error.code, error.message, "No se pudo guardar el perfil.") };
+  }
+  // La moneda cambia el formato de montos en toda la app
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 
@@ -67,7 +105,7 @@ export async function guardarPersonasBot(
     .eq("id", ctx.empresaId);
 
   if (error)
-    return { ok: false, error: errorAmigable(error.code, "No se pudo guardar la lista de personas.") };
+    return { ok: false, error: errorAmigable(error.code, error.message, "No se pudo guardar la lista de personas.") };
   revalidatePath("/configuracion");
   return { ok: true };
 }
@@ -93,7 +131,7 @@ export async function guardarMarca(colores: ColoresMarca): Promise<Resultado> {
     .eq("id", ctx.empresaId);
 
   if (error)
-    return { ok: false, error: errorAmigable(error.code, "No se pudieron guardar los colores.") };
+    return { ok: false, error: errorAmigable(error.code, error.message, "No se pudieron guardar los colores.") };
   revalidatePath("/configuracion");
   return { ok: true };
 }
@@ -145,7 +183,7 @@ export async function guardarNotificaciones(
     .eq("id", ctx.empresaId);
 
   if (error)
-    return { ok: false, error: errorAmigable(error.code, "No se pudieron guardar las notificaciones.") };
+    return { ok: false, error: errorAmigable(error.code, error.message, "No se pudieron guardar las notificaciones.") };
   revalidatePath("/configuracion");
   return { ok: true };
 }
@@ -186,7 +224,7 @@ export async function registrarSesion(datos: {
     .eq("id_usuario", ctx.userId);
 
   if (errorLectura)
-    return { ok: false, error: errorAmigable(errorLectura.code, "No se pudo registrar la sesión.") };
+    return { ok: false, error: errorAmigable(errorLectura.code, errorLectura.message, "No se pudo registrar la sesión.") };
 
   const lugarConocido =
     !datos.lugar ||
@@ -214,7 +252,7 @@ export async function registrarSesion(datos: {
     .single();
 
   if (error)
-    return { ok: false, error: errorAmigable(error.code, "No se pudo registrar la sesión.") };
+    return { ok: false, error: errorAmigable(error.code, error.message, "No se pudo registrar la sesión.") };
 
   revalidatePath("/configuracion");
   return {

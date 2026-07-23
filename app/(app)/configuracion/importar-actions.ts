@@ -10,6 +10,15 @@ import {
   type FilaCruda,
   type Mapeo,
 } from "@/lib/importacion";
+import {
+  hayComisiones,
+  normalizarConfigComisiones,
+  periodoCierre,
+  porcentajeParaVenta,
+  type CierreNomina,
+  type ConfigComisiones,
+  type ConfigNomina,
+} from "@/lib/nomina";
 import { contextoEmpresa } from "@/lib/supabase/contexto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -48,6 +57,53 @@ async function clavesExistentes(
   );
 }
 
+/**
+ * Vendedores comisionables por NOMBRE (minúsculas) → id y cargo,
+ * junto con la configuración, para cruzar la columna "Vendedor"
+ * del archivo importado (el % se calcula venta por venta: en la
+ * modalidad escalonada depende del monto). Sin roles comisionables
+ * devuelve un mapa vacío y la importación ignora la columna.
+ */
+async function mapaVendedores(
+  supabase: SupabaseClient,
+  empresaId: string
+): Promise<{
+  config: ConfigComisiones | null;
+  cierre: CierreNomina | undefined;
+  porNombre: Map<string, { id: string; cargo: string }>;
+}> {
+  const porNombre = new Map<string, { id: string; cargo: string }>();
+  let config: ConfigComisiones | null = null;
+  let cierre: CierreNomina | undefined;
+  try {
+    const { data: empresa } = await supabase
+      .from("empresas")
+      .select("config_comisiones, config_nomina")
+      .eq("id", empresaId)
+      .maybeSingle();
+    config = (empresa?.config_comisiones as ConfigComisiones | null) ?? null;
+    cierre = (empresa?.config_nomina as ConfigNomina | null)?.cierre;
+    if (!hayComisiones(config)) return { config: null, cierre, porNombre };
+
+    const cargos = config!.roles.map((r) => r.cargo.trim().toLowerCase());
+    const { data: empleados } = await supabase
+      .from("empleados")
+      .select("id, nombre, cargo")
+      .eq("id_empresa", empresaId)
+      .eq("activo", true);
+    for (const e of empleados ?? []) {
+      if (!cargos.includes(String(e.cargo).trim().toLowerCase())) continue;
+      porNombre.set(String(e.nombre).trim().toLowerCase(), {
+        id: e.id as string,
+        cargo: e.cargo as string,
+      });
+    }
+  } catch {
+    /* sin comisiones: la importación sigue normal */
+  }
+  return { config, cierre, porNombre };
+}
+
 /** Traduce el error técnico de la base a un mensaje entendible */
 function motivoLegible(codigo: string | undefined, mensaje: string): string {
   if (codigo === "23505") return "número de factura repetido";
@@ -69,7 +125,36 @@ async function importarFilasCrudas(
 ): Promise<{ importadas: number; omitidas: number; error?: string }> {
   const hoy = new Date().toISOString().slice(0, 10);
   const existentes = await clavesExistentes(supabase, empresaId);
+  const vendedores = await mapaVendedores(supabase, empresaId);
   const vistas = new Set<string>(); // duplicados dentro del propio archivo
+  // Escalonada por cantidad: cuántas ventas lleva cada vendedor en
+  // cada período de cierre (arranca con lo que ya hay en la base y
+  // avanza con las filas del propio archivo)
+  const configComisiones = normalizarConfigComisiones(vendedores.config);
+  const escalaPorCantidad =
+    vendedores.config !== null &&
+    configComisiones.modalidad === "venta" &&
+    configComisiones.tipo_venta === "escalonada" &&
+    configComisiones.escala === "cantidad";
+  const contadores = new Map<string, number>();
+  async function numeroDeVenta(idVendedor: string, fecha: string): Promise<number> {
+    const { desde, hasta } = periodoCierre(vendedores.cierre, fecha);
+    const clave = `${idVendedor}|${desde}`;
+    if (!contadores.has(clave)) {
+      const { count } = await supabase
+        .from("facturas")
+        .select("id", { count: "exact", head: true })
+        .eq("id_empresa", empresaId)
+        .eq("id_vendedor", idVendedor)
+        .eq("tipo", "cobrar")
+        .gte("fecha_emision", desde)
+        .lte("fecha_emision", hasta);
+      contadores.set(clave, count ?? 0);
+    }
+    const numero = contadores.get(clave)! + 1;
+    contadores.set(clave, numero);
+    return numero;
+  }
 
   const base = Date.now();
   const listas = [];
@@ -86,9 +171,29 @@ async function importarFilasCrudas(
       continue;
     }
     vistas.add(clave);
+    // El nombre del vendedor no es columna de la tabla: se cruza
+    // con los empleados comisionables y viaja como id + % congelado
+    const { vendedor, ...filaFactura } = fila;
+    const comisionable =
+      fila.tipo === "cobrar" && vendedor
+        ? vendedores.porNombre.get(vendedor.toLowerCase())
+        : undefined;
     listas.push({
       id_empresa: empresaId,
-      ...fila,
+      ...filaFactura,
+      ...(comisionable
+        ? {
+            id_vendedor: comisionable.id,
+            comision_porcentaje: porcentajeParaVenta(
+              vendedores.config,
+              comisionable.cargo,
+              fila.monto,
+              escalaPorCantidad
+                ? await numeroDeVenta(comisionable.id, fila.fecha_emision)
+                : undefined
+            ),
+          }
+        : {}),
       // Se respeta el número del archivo; sin número, se genera uno
       numero_factura: fila.numero_factura || `IMP-${base}-${listas.length + 1}`,
     });

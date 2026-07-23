@@ -1,3 +1,4 @@
+export const runtime = "edge";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import type { FilaDinero } from "@/lib/finanzas";
 import {

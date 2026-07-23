@@ -1,9 +1,8 @@
 "use server";
 
-import { createHash, randomInt } from "crypto";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import nodemailer from "nodemailer";
+
 import { contextoEmpresa } from "@/lib/supabase/contexto";
 
 // ============================================================
@@ -30,8 +29,12 @@ interface Conteos {
   mensajes: number;
 }
 
-function huella(codigo: string, userId: string): string {
-  return createHash("sha256").update(`${codigo}:${userId}`).digest("hex");
+async function huella(codigo: string, userId: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(`${codigo}:${userId}`);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export async function solicitarCodigoBorrado(): Promise<{
@@ -68,31 +71,35 @@ export async function solicitarCodigoBorrado(): Promise<{
     ]);
 
   // Código de 6 dígitos → correo; solo su huella queda en la cookie
-  const codigo = String(randomInt(100000, 999999));
+  const codigo = String(Math.floor(100000 + Math.random() * 900000));
   const vence = Date.now() + VIGENCIA_MIN * 60 * 1000;
-  cookies().set(COOKIE, `${huella(codigo, ctx.userId)}.${vence}`, {
+  cookies().set(COOKIE, `${await huella(codigo, ctx.userId)}.${vence}`, {
     httpOnly: true,
     sameSite: "lax",
     maxAge: VIGENCIA_MIN * 60,
     path: "/",
   });
 
+  if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) {
+    cookies().delete(COOKIE);
+    return { ok: false, error: "Configuración de correo incompleta." };
+  }
+
   try {
-    const transporte = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
       },
+      body: JSON.stringify({
+        from: process.env.EMAIL_FROM,
+        to: user.email,
+        subject: `${codigo} es tu código para borrar los datos de MapFlow`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:480px"><p>Pediste <strong>borrar todos los datos financieros</strong> de tu cuenta de MapFlow.</p><p style="font-size:32px;letter-spacing:6px;font-weight:bold;margin:16px 0">${codigo}</p><p>El código vence en ${VIGENCIA_MIN} minutos. Si no fuiste tú, ignora este correo y cambia tu contraseña.</p></div>`,
+      }),
     });
-    await transporte.sendMail({
-      from: `MapFlow <${process.env.GMAIL_USER}>`,
-      to: user.email,
-      subject: `${codigo} es tu código para borrar los datos de MapFlow`,
-      html: `<div style="font-family:Arial,sans-serif;max-width:480px"><p>Pediste <strong>borrar todos los datos financieros</strong> de tu cuenta de MapFlow.</p><p style="font-size:32px;letter-spacing:6px;font-weight:bold;margin:16px 0">${codigo}</p><p>El código vence en ${VIGENCIA_MIN} minutos. Si no fuiste tú, ignora este correo y cambia tu contraseña.</p></div>`,
-    });
+    if (!res.ok) throw new Error("Fallo al enviar correo");
   } catch {
     cookies().delete(COOKIE);
     return {
@@ -129,7 +136,7 @@ export async function confirmarBorrado(
     cookies().delete(COOKIE);
     return { ok: false, error: "El código venció. Pide uno nuevo." };
   }
-  if (hash !== huella(codigo.trim(), ctx.userId))
+  if (hash !== await huella(codigo.trim(), ctx.userId))
     return { ok: false, error: "Código incorrecto. Revisa el correo." };
 
   // Orden de borrado: primero lo que depende de facturas

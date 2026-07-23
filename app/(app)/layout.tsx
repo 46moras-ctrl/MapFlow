@@ -1,9 +1,19 @@
 import { AsistenteBurbuja } from "@/components/app/asistente-burbuja";
 import { BottomNav } from "@/components/app/bottom-nav";
+import { MonedaGlobal } from "@/components/app/moneda-global";
 import { Sidebar } from "@/components/app/sidebar";
 import { TemaMarca } from "@/components/app/tema-marca";
 import { Topbar } from "@/components/app/topbar";
 import { generarAlertas, type Alerta } from "@/lib/alertas";
+import { gestionarCambioComisiones } from "@/lib/comisiones-pendientes";
+import { configurarMoneda } from "@/lib/moneda";
+import {
+  generarAlertaNomina,
+  type CambioComisionPendiente,
+  type ConfigComisiones,
+  type ConfigNomina,
+  type EmpleadoDB,
+} from "@/lib/nomina";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 export default async function AppLayout({
@@ -14,10 +24,15 @@ export default async function AppLayout({
   // nacen en migraciones y la app no debe romperse sin ellas.
   let alertas: Alerta[] = [];
   let empresa: {
+    id?: string;
     nombre?: string | null;
     foto_url?: string | null;
     colores_marca?: { primario?: string; secundario?: string } | null;
     mostrar_presupuestos?: boolean | null;
+    moneda?: string | null;
+    config_nomina?: ConfigNomina | null;
+    config_comisiones?: ConfigComisiones | null;
+    config_comisiones_pendiente?: CambioComisionPendiente | null;
   } | null = null;
   try {
     const supabase = createSupabaseServer();
@@ -32,8 +47,18 @@ export default async function AppLayout({
         .eq("id_usuario", user.id)
         .maybeSingle();
       empresa = data;
+      configurarMoneda(data?.moneda);
 
       if (data) {
+        // Cambio de método de comisión programado: se aplica o
+        // descarta al llegar el cierre, y avisa 3 días antes
+        const alertaCambio = await gestionarCambioComisiones(
+          supabase,
+          data.id,
+          data.config_comisiones_pendiente,
+          user.email ?? null
+        );
+
         const { data: facturas } = await supabase
           .from("facturas")
           .select(
@@ -42,6 +67,36 @@ export default async function AppLayout({
           .eq("id_empresa", data.id)
           .neq("estado", "pagado");
         alertas = generarAlertas((facturas as never[]) ?? []);
+        if (alertaCambio) alertas = [alertaCambio, ...alertas];
+
+        // Aviso de nómina próxima: cuánto toca pagar en salarios y
+        // comisiones pendientes según los días de pago configurados.
+        if (data.config_nomina?.frecuencia) {
+          const [emp, ventas] = await Promise.all([
+            supabase
+              .from("empleados")
+              .select("*")
+              .eq("id_empresa", data.id)
+              .eq("activo", true),
+            supabase
+              .from("facturas")
+              .select("monto, comision_porcentaje")
+              .eq("id_empresa", data.id)
+              .eq("tipo", "cobrar")
+              .eq("comision_liquidada", false)
+              .not("id_vendedor", "is", null),
+          ]);
+          const comisionesPendientes = (ventas.data ?? []).reduce(
+            (s, f) => s + Number(f.monto) * (Number(f.comision_porcentaje) || 0) / 100,
+            0
+          );
+          const alertaNomina = generarAlertaNomina(
+            data.config_nomina,
+            (emp.data as EmpleadoDB[]) ?? [],
+            comisionesPendientes
+          );
+          if (alertaNomina) alertas = [alertaNomina, ...alertas];
+        }
       }
     }
   } catch {
@@ -52,6 +107,8 @@ export default async function AppLayout({
     <div className="min-h-screen bg-surface">
       {/* Colores de marca del dueño, aplicados a toda la plataforma */}
       <TemaMarca colores={empresa?.colores_marca} />
+      {/* Moneda de la empresa: formatea todos los montos de la app */}
+      <MonedaGlobal moneda={empresa?.moneda} />
       {/* Escritorio: sidebar · Móvil: barra inferior */}
       <Sidebar />
       <div className="ml-0 md:ml-64">

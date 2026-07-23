@@ -1,3 +1,4 @@
+export const runtime = "edge";
 import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { PresupuestosCliente, type PresupuestoDB } from "./presupuestos-cliente";
